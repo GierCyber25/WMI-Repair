@@ -7,7 +7,9 @@
 # --------------------------------------------------------Logging Section--------------------------------------------------------
 ##################### logging is still a work in progress
 
-$date = Get-Date
+function Date-Stamp {
+    Get-Date -Format "MM/DD/YYYY"
+}
 
 function Get-Time {
     Get-Date -Format "HH:mm:ss"
@@ -15,94 +17,95 @@ function Get-Time {
 
 ##################### Initial detection and setup for logging.
 
-function LogFile
+function Log-File
     {
-        #################### variables
-        $getUser = get-childitem env:\userprofile | select-object -expandproperty value
-        $usrPath_OneDrive = $getUser + "\OneDrive\Desktop\"
-        $usrPath = $getUser + "\Desktop\"
+        #################### Note: when using this function for logpath you must write it as (Log-File) i.e. <command> | Write-Log -LogPath (Log-File)
+        #################### Variable initialization
+        $GetUser = Get-ChildItem env:\userprofile | Select-Object -ExpandProperty Value
+        $UsrPath_OneDrive = $GetUser + "\OneDrive\Desktop\"
+        $UsrPath = $GetUser + "\Desktop\"
 
-        $pathError = "Error: User path could not be found!"
-        $logFile = "WMI_Repair_Log.txt"
+        $PathError = "Error: User path could not be found!"
+        $LogFile = "WMI_Repair_Log.txt"
         
         #################### Test user desktop path with error handling
 
-        try
+        Try
             {
-                if (Test-Path -Path $usrPath_OneDrive)
+                If (Test-Path -Path $UsrPath_OneDrive)
                     {
                         Write-Host "OneDrive detected`nSetting up logfile accordingly.."
-                        $usrPth = $usrPath_OneDrive                    
+                        $UsrPth = $UsrPath_OneDrive                    
                     }
                 
-                elseif (Test-Path -Path $usrPath)
+                ElseIf (Test-Path -Path $UsrPath)
                     {
                         Write-Host "Normal user path detected!`nSetting up logfile.."
-                        $usrPth = $usrPath
+                        $UsrPth = $UsrPath
                     }
                 
-                else
+                Else
                     {
-                        throw $pathError
+                        Throw $PathError
                     }
             }
-        catch
+        Catch
             {
-                if ($_ -match $pathError)
+                If ($_ -match $PathError)
                     {
-                        $usrPth = $False
+                        $UsrPth = $False
                     }
             }
         
         #################### Testing for log existence under user desktop
 
-        if ($usrPth -ne $false)
+        If ($UsrPth -ne $False)
             {
-                $usrLogPath = $usrPth+$logFile
-                $test = Test-Path -Path $usrLogPath
+                $UsrLogPath = $UsrPth+$LogFile
+                $TestUserPath = Test-Path -Path $UsrLogPath
 
-                if ($test -eq $true)
+                If ($TestUserPath -eq $True)
                     {
                         Write-Host "Log file detected"
-                        Add-Content -Path $usrLogPath -Value "-------WMI Repair Script Log-------`n($date)"
-                        return $usrLogPath
+                        Write-Log -LogPath $UsrLogPath -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
+                        Return $UsrLogPath
                     }
 
-                if ($test -eq $false)
+                If ($TestUserPath -eq $False)
                     {
-                        #################### Create log file if it does not exist
-                        New-Item -Path $usrPth -Name $logFile -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)" 
-                        return $usrLogPath
+                        #################### Create log file If it does not exist
+                        New-Item -Path $UsrPth -Name $LogFile -ItemType "File" -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------" 
+                        Return $UsrLogPath
                     }
             }
 
-        #################### Test for log existence if user path not findable
+        #################### Test for log existence If user path not findable
 
-        if ($usrPth -eq $false)
+        If ($UsrPth -eq $False)
             {
-                $logFolder = "C:\WMI Repair Logs"
-                $logFilePath = $logFolder + $logFile
-                $test1 = Test-Path -Path $logFolder
-                $test2 = Test-Path -Path $logFilePath
+                $LogFolder = "C:\WMI Repair Logs"
+                $LogFilePath = $LogFolder + $LogFile
+                $TestFolderPath = Test-Path -Path $LogFolder
+                $TestFilePath = Test-Path -Path $LogFilePath
 
-                if ($test1 -eq $true)
+                If ($TestFolderPath -eq $True)
                     {
-                        if ($test2 -eq $true)
+                        If ($TestFilePath -eq $True)
                             {
                                 Write-Host "Pre-existing log found in alternative location!"
-                                Add-Content -Path $logFilePath -Value "-------WMI Repair Script Log-------`n($date)"
-                                return $logFilePath
+                                Write-Log -LogPath $LogFilePath -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
+                                Return $LogFilePath
 
                             }
                     }
                 
-                elseif ($test1 -eq $false)
+                ElseIf ($TestFolderPath -eq $False)
                     {
                         Write-Host "Pre-existing log file not found"
-                        New-Item -Path $logFolder -ItemType "Directory"
-                        New-Item -path $logFolder -Name $logFile -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)"
+                        New-Item -Path $LogFolder -ItemType "Directory"
+                        New-Item -path $LogFolder -Name $LogFile -ItemType "File" -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
 
-                        return $logFilePath
+                        Return $LogFilePath
                     }
             }
          
@@ -110,114 +113,138 @@ function LogFile
     }
 
 
-Function UnrecoverableScriptFailure
+Function Write-HardFailure
     {
+    #################### Function for unrecoverable failures requiring a reboot.
         param 
             ( 
                 [string]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
-                [string]$logPath
+                [string]$LogPath
             )
         
         Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Add-Content -Path $logPath -Value "[$(Get-Time)]: Unrecoverable script failure detected!`nError: ($ErrorMessage)" 
+        Add-Content -Path $LogPath -Value "[$(Get-Time)]: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
         Start-Sleep -Seconds 30
+
+        #################### send windows notif sound to computer speakers before reboot
+        for ($i = 0; $i -le 1; $i++){"`a"}
         Restart-Computer -Force
         exit 1
     }
 
 
-Function ScriptFailure_General
+Function Write-GeneralFailure
     {
+    #################### general failures, usually no reboot required. (Error handling should already be in place.)
         param 
-            ( 
-                [string]$ErrorMessage = "Unknown or Undefined error detected!",
-                [string]$logPath 
+            (
+                [Parameter(ValueFromPipeline = $True)]$ErrorMessage = "Unknown or Undefined error detected!",
+                [string]$LogPath 
             )
         Write-Host "General Script Failure Detected"
-        Add-Content -Path $logPath -Value "[$(Get-Time)]: General script failure detected!`nError: ($ErrorMessage)"
+        Add-Content -Path $LogPath -Value "[$(Get-Time)]: General script failure detected!`n`tError: $ErrorMessage"
     }
 
-function debugLog
+function Write-Log
     {
-        # To Do: add logic
+    #################### General Logging function: debug or information
+        [CmdletBinding()]
+        param 
+            (
+                [Parameter(ValueFromPipeline = $True)]$Message,
+                [string]$Type = "Info", #################### Debug, Info, Warning (default)
+                [string]$LogPath
+            )
+
+        process{
+            $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
+            Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : $LogMessage"
+        }
     }
+
+
 
 # --------------------------------------------------------Main script functions--------------------------------------------------------
 
 
 
-function Test-WMIRepo 
-	{
-		return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
+function Test-WMIRepo {
+		Return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
 	}
 
-Function Check-Bitlocker 
-	{
-		return (manage-bde -status c:) -match "invalid namespace"
+
+Function Get-BitLocker {
+		Return (Manage-Bde -Status c:) -match "invalid namespace"
 	}
+
 
 Function Verify-WMIEvents 
 	{
 		[CmdletBinding()]
 		param (
-			[int]$DaysBack = 2
+			[int]$DaysBack = 3
 		)
-		$since = (Get-Date).AddDays(-$DaysBack)
-		$found = Get-WinEvent -FilterHashtable @{
-			LogName   = 'Application'
-			Id        = 2003,5612,2002,1025
-			StartTime = $since
+		$Since = (Get-Date).AddDays(-$DaysBack)
+		$Found = Get-WinEvent -FilterHashtable @{
+			LogName   = 'Application';
+			Id        = '2003','5612','2002','1025';
+			StartTime = $Since
 		} -MaxEvents 1 -ErrorAction SilentlyContinue
-		return [bool]$found
+		Return [bool]$Found
 	}
+
 
 Function Verify-PerfLib 
 	{
 		[CmdletBinding()]
 		param (
-			[int]$DaysBack = 2
+			[int]$DaysBack = 3
 		)
-		$since = (Get-Date).AddDays(-$DaysBack)
-		$found = Get-WinEvent -FilterHashtable @{
+		$Since = (Get-Date).AddDays(-$DaysBack)
+		$Found = Get-WinEvent -FilterHashtable @{
 			LogName   = 'Application';
-			Id        = '1008','1023';
-			StartTime = $since
+			Id        = '1000','1008','1023','2003','1022','1017';
+			StartTime = $Since
 		} -MaxEvents 1 -ErrorAction SilentlyContinue
-		return [bool]$found
+		Return [bool]$Found
 	}
+
 
 Function Get-WmiApSrv 
 	{
-		$serviceName = 'wmiapsrv'
-		$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+    #################### service checks | for some reason this service can get deleted sometimes
+		$ServiceName = 'wmiapsrv'
+		$RegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
 
-		# 1. Check if DeleteFlag exists and is set status: 1
-		try 
+		# 1. Check If DeleteFlag exists and is set status: 1
+		Try 
 			{
-				$flag = Get-ItemProperty -Path $regPath -Name DeleteFlag -ErrorAction Stop
-				if ($flag.DeleteFlag -eq 1) { return 1 }
+				$Flag = Get-ItemProperty -Path $RegPath -Name DeleteFlag -ErrorAction Stop
+				If ($Flag.DeleteFlag -eq 1) { Return 1 }
 			}
-		catch 
+		Catch 
 			{
-				# Continue if DeleteFlag not found
+				# Continue If DeleteFlag not found
 			}
 
 		# 2. If DeleteFlag missing → check service existence
-		$svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-		if ($null -eq $svc) 
+		$Svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+		If ($null -eq $Svc) 
 			{
 				# Service does not exist: status 2
-				return 2
+				Return 2
 			} 
-		else 
+		Else 
 			{
 				# Service exists and isn't marked: status 3
-				return 3
+				Return 3
 			}
 	}
 
-function WmiApSrvChk
+
+function Resolve-WmiApSrv
 	{
+    #################### parse output of Get-WmiApSrv to determine next steps
 		switch (Get-WmiApSrv) 
 			{
 				1 {Recreate-WmiApSrv}
@@ -226,92 +253,103 @@ function WmiApSrvChk
 			}
 	}
 
+
 Function Rebuild-WMIRepo
 	{
-        $svcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
+        param
+            (
+                [ValidateSet("Standard", "Complete")]
+                [string]$RepairType
+            )
+
+
+        If ($RepairType -eq "Standard")
+            {
+                $SvcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
 		
-        WmiApSrvChk
-		cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
+                Resolve-WmiApSrv
+		        cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
 		
-        # Attempt to stop the WMI service
-		$CheckSvc = cmd /c "net stop winmgmt /y"
-		if ($CheckSvc -match "could not be stopped.") 
-			{
-				Write-Host "Windows Management Instrumentation couldn't be stopped.`nAttempting to forcefully restart the service."
+                # Attempt to stop the WMI service
+		        $CheckSvc = cmd /c "net stop winmgmt /y"
+		        If ($CheckSvc -match "could not be stopped.") 
+			        {
+				        Write-Host "Windows Management Instrumentation Services could not be stopped.`nAttempting to forcefully restart the service."
+                        Write-Output "Windows Management Instrumentation Services could not be stopped normally.`n`tAttempting forceful service restart" | Write-GeneralFailure -LogPath (Log-File)
                 
-				# Attempt to forcefully restart the service
-				try 
-					{
-						Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
-						Write-Host "WMI Service forcefully Stopped."
-					} 
-				catch 
-					{
-						Write-Host "WMI Service stop could not be forced."
-                        UnrecoverableScriptFailure -ErrorMessage $svcError -logPath LogFile
-						
-					}
-			} 
-		elseif ($CheckSvc -match "service was stopped successfully") 
-			{
-				Write-Host "Windows Management Instrumentation stopped successfully.`nRestarting service.."
-				cmd /c "net start winmgmt"
-			} 
-		else 
-			{
-				Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
-			}
+				        # Attempt to forcefully restart the service
+				        Try 
+					        {
+						        Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
+						        Write-Host "WMI Service forcefully Stopped."
+					        } 
+				        Catch 
+					        {
+						        Write-Host "WMI Service stop could not be forcefully stopped.."
+                                Write-HardFailure -ErrorMessage $SvcError -LogPath (Log-File)
+					        }
+			        } 
+		        ElseIf ($CheckSvc -match "service was stopped successfully") 
+			        {
+				        Write-Host "Windows Management Instrumentation stopped successfully.`nRestarting service.."
+				        cmd /c "net start winmgmt"
+			        } 
+		        Else 
+			        {
+				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
+			        }
 			
-		WmiApSrvChk
-		cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
-		cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
-		cmd /c "for %i in (*.exe) do %i /regserver"
-		cmd /c "regsvr32 C:\Windows\System32\wbem\wmisvc.dll /s"
-		cmd /c "wmiprvse /regserver"
+		        Resolve-WmiApSrv
+		        cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
+		        cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
+		        cmd /c "for %i in (*.exe) do %i /regserver"
+		        cmd /c "regsvr32 C:\Windows\System32\wbem\wmisvc.dll /s"
+		        cmd /c "wmiprvse /regserver"
+            }
+
+        If ($RepairType -eq "Complete")
+            {
+		        Resolve-WmiApSrv
+		        cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
+		        sc.exe config "winmgmt" start= "disabled"
+		        # Attempt to stop the WMI service
+		        $CheckSvc = cmd /c "net stop winmgmt /y"
+		        If ($CheckSvc -match "could not be stopped.") 
+			        {
+				        Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
+                        Start-Sleep -Seconds 2
+				        # Attempt to forcefully stop the service
+				        Try 
+					        {
+						        Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
+						        Write-Host "Service forcefully restarted." | Write-Log -LogPath (Log-File)
+                                Start-Sleep -Seconds 2
+					        } 
+				        Catch 
+					        {
+						        Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
+                                Write-HardFailure -ErrorMessage "Windows Management Instrumentation services couldn't be stopped." -LogPath (Log-File)
+						        exit 1
+					        }
+			        } 
+		        ElseIf ($CheckSvc -match "service was stopped successfully") 
+			        {
+				        Write-Host "Windows Management Instrumentation stopped successfully.`Restarting Service."
+			        } 
+		        Else 
+			        {
+				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
+			        }
+		        Rename-Item -Path "C:\Windows\System32\Wbem\Repository" -NewName "Repository.old" -Force
+		        Resolve-WmiApSrv
+		        cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
+		        cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
+		        cmd /c "for %i in (*.exe) do %i /regserver"
+		        cmd /c "regsvr32 wmisvc.dll /s"
+		        cmd /c "wmiprvse /regserver"
+            }
 	}
 
-Function Rebuild-WMIRepo_FullReset 
-	{
-		WmiApSrvChk
-		cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
-		sc.exe config "winmgmt" start= "disabled"
-		# Attempt to stop the WMI service
-		$CheckSvc = cmd /c "net stop winmgmt /y"
-		if ($CheckSvc -match "could not be stopped.") 
-			{
-				Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
-                Start-Sleep -Seconds 2
-				# Attempt to forcefully stop the service
-				try 
-					{
-						Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
-						Write-Host "Service forcefully restarted."
-                        Start-Sleep -Seconds 2
-					} 
-				catch 
-					{
-						Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
-                        Start-Sleep -Seconds 30
-						Restart-Computer -Force
-						exit 1
-					}
-			} 
-		elseif ($CheckSvc -match "service was stopped successfully") 
-			{
-				Write-Host "Windows Management Instrumentation stopped successfully.`Restarting Service."
-			} 
-		else 
-			{
-				Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
-			}
-		Rename-Item -Path "C:\Windows\System32\Wbem\Repository" -NewName "Repository.old" -Force
-		WmiApSrvChk
-		cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
-		cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
-		cmd /c "for %i in (*.exe) do %i /regserver"
-		cmd /c "regsvr32 wmisvc.dll /s"
-		cmd /c "wmiprvse /regserver"
-	}
 
 Function Recreate-WmiApSrv 
 	{
@@ -321,205 +359,213 @@ Function Recreate-WmiApSrv
 		sc.exe start WmiApSrv
 	}
 
+
 Function Resync-Counters 
 	{
+        param
+            (
+                [ValidateSet("Standard", "Complete")]
+                [string]$SyncType
+            )
 		Write-Host "`nAttempting to rebuild performance counters"
 		
 		#Initializing error handling
-		$attempt = 0
-		$maxAttempts = 3
-		$errorPattern = "Error: Unable to rebuild performance counter setting"
-		$successPattern = "Info: Successfully rebuilt performance counter setting"
+		$Attempt = 0
+		$MaxAttempts = 3
+		$ErrorPattern = "Error: Unable to rebuild performance counter setting"
+		$SuccessPattern = "Info: Successfully rebuilt performance counter setting"
 		
-		do {
-			$attempt++
-			try {
-					"C:\Windows\system32", "C:\Windows\SysWOW64" |
-					ForEach-Object 
-						{
-							& cmd /c "cd $_ && lodctr /R" 2>&1 |
-							ForEach-Object 
-								{ 
-									if ($_ -match $errorPattern)
-										{ 
-											throw $_ 
-										} 
-									elseif ($_ -match $successPattern)
-										{
-											Write-Output "Rebuild Successful"
-										} 
-								} 
-						}
-					#sync counters if lodctr succeed
-					& cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
-					Write-Host "Resync Successful!"
-					return $True
-				}
-			catch 
-				{
-					if ($_.Exception.Message -match $errorPattern) 
-						{
-							Write-Host "Rebuild Error Detected, retrying (Attempt $attempt)"
-							if ($attempt -lt $maxAttempts)
-								{
-									Start-Sleep -Seconds 2
-								}
-							else
-								{
-									Write-Host "Failed to rebuild performance counters after $maxAttempts attempts. Rebooting computer!"
-									Write-Error $_.Exception.Message
-									Return $false
-								}
-						}
-					else 
-						{
-							Write-Error $_.Exception.Message
-							Restart-Computer
-							return $false
-						}
-				}
-			} while ($attempt -lt $maxAttempts)
+        if ($SyncType -eq "Standard")
+            {
+		        do {
+			        $Attempt++
+			        Try {
+					        "C:\Windows\system32", "C:\Windows\SysWOW64" |
+					        ForEach-Object 
+						        {
+							        & cmd /c "cd $_ && lodctr /R" 2>&1 |
+							        ForEach-Object 
+								        { 
+									        If ($_ -match $ErrorPattern)
+										        { 
+											        Throw $_ 
+										        } 
+									        ElseIf ($_ -match $SuccessPattern)
+										        {
+											        Write-Output "Rebuild Successful"
+										        } 
+								        } 
+						        }
+					        #sync counters If lodctr succeed
+					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
+					        Write-Host "Resync Successful!"
+					        Return $True
+				        }
+			        Catch 
+				        {
+					        If ($_.Exception.Message -match $ErrorPattern) 
+						        {
+							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
+                                    Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Debug -LogPath (Log-File)
+							        If ($Attempt -lt $MaxAttempts)
+								        {
+									        Start-Sleep -Seconds 2
+								        }
+							        Else
+								        {
+									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts. Rebooting computer!"
+									        Write-Error $_.Exception.Message
+									        Return $False
+								        }
+						        }
+					        Else 
+						        {
+							        Write-Error $_.Exception.Message
+							        Restart-Computer
+							        Return $False
+						        }
+				        }
+			        } while ($Attempt -lt $MaxAttempts)
 
-		# Set WMI Services back to normal and start them
-		sc.exe config "winmgmt" start= "auto"
-		sc.exe config "wmiApSrv" start= "auto"
-		cmd /c "net start winmgmt"
-		cmd /c "net start wmiApSrv"
-	}
-
-Function Resync-Counters_Full 
-	{
-		Write-Host "`nAttempting to rebuild performance counters"
+		        # Set WMI Services back to normal and start them
+		        sc.exe config "winmgmt" start= "auto"
+		        sc.exe config "wmiApSrv" start= "auto"
+		        cmd /c "net start winmgmt"
+		        cmd /c "net start wmiApSrv"
+            }
+############################################################
+		if ($SyncType -eq "Complete")
+            {
+                Write-Host "`nAttempting to rebuild performance counters"
 		
-		#Initializing error handling
-		$attempt = 0
-		$maxAttempts = 3
-		$errorPattern = "Error: Unable to rebuild performance counter setting"
-		$successPattern = "Info: Successfully rebuilt performance counter setting"
+		        #Initializing error handling
 		
-		do {
-			$attempt++
-			try {
-					"C:\Windows\system32", "C:\Windows\SysWOW64" |
-					ForEach-Object 
-						{
-							& cmd /c "cd $_ && lodctr /R" 2>&1 |
-							ForEach-Object 
-								{ 
-									if ($_ -match $errorPattern)
-										{ 
-											throw $_ 
-										} 
-									elseif ($_ -match $successPattern)
-										{
-											Write-Output "Rebuild Successful"
+		        do {
+			        $Attempt++
+			        Try {
+					        "C:\Windows\system32", "C:\Windows\SysWOW64" |
+					        ForEach-Object 
+						        {
+							        & cmd /c "cd $_ && lodctr /R" 2>&1 |
+							        ForEach-Object 
+								        { 
+									        If ($_ -match $ErrorPattern)
+										        { 
+											        Throw $_ 
+										        } 
+									        ElseIf ($_ -match $SuccessPattern)
+										        {
+											        Write-Output "Rebuild Successful"
 
-										} 
-								}
-						}
-					#sync counters if lodctr succeed
-					& cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
-            
-					Write-Host "Resync Successful!"
-				}
-			catch 
-				{
-					if ($_.Exception.Message -match $errorPattern)
-						{
-							Write-Host "Rebuild Error Detected, retrying (Attempt $attempt)"
-							if ($attempt -lt $maxAttempts)
-								{
-									Start-Sleep -Seconds 2
-								}
-							else
-								{
-									Write-Host "Failed to rebuild performance counters after $maxAttempts attempts."
-									Write-Error $_.Exception.Message
-								}
+										        } 
+								        }
+						        }
+					        #sync counters If lodctr succeed
+					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
+					        Write-Host "Resync Successful!"
+                            Write-Log 
+				        }
+			        Catch 
+				        {
+					        If ($_.Exception.Message -match $ErrorPattern)
+						        {
+							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)"
+							        If ($Attempt -lt $MaxAttempts)
+								        {
+									        Start-Sleep -Seconds 2
+								        }
+							        Else
+								        {
+									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts."
+                                            Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Debug -LogPath (Log-File)
+									        Write-HardFailure $_.Exception.Message
+								        }
 							
-						}
-					else 
-						{
-							Write-Error -Message "Unexpected error has occurred ($_.Exception.Message)"
-						}
-				}
-			} while ($attempt -lt $maxAttempts)
+						        }
+					        Else 
+						        {
+							        Write-Host "Unexpected error has occurred."
+                                    Write-HardFailure $_.Exception.Message
+						        }
+				        }
+			        } while ($Attempt -lt $MaxAttempts)
 		
-		# Set WMI Services back to normal and start them
-		sc.exe config "winmgmt" start= "auto"
-		sc.exe config "wmiApSrv" start= "auto"
-		cmd /c "net start winmgmt"
-		cmd /c "net start wmiApSrv"
+		        # Set WMI Services back to normal and start them
+		        sc.exe config "winmgmt" start= "auto"
+		        sc.exe config "wmiApSrv" start= "auto"
+		        cmd /c "net start winmgmt"
+		        cmd /c "net start wmiApSrv"
+            }
 	}
 	
 
 Function Main
     {
         Write-Host "Beginning Initial Verification of WMI"
-        if (Test-WMIRepo) 
+        If (Test-WMIRepo) 
 	        {
 		        Write-Host "Repository inconsistent – attempting salvage..."
-		        Rebuild-WMIRepo
+		        Rebuild-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters
+		        Resync-Counters -SyncType Standard
 		
-		        if (Test-WMIRepo) 
+		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed – performing full reset"
-				        Rebuild-WMIRepo_FullReset
+				        Rebuild-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters_Full
+				        Resync-Counters -SyncType Complete
 			        } 
-		        else 
+		        Else 
 			        {
 				        Write-Output "Repository passed initial verification.`nReviewing machine logs for relevant Events."
 			        }
 			
 	        }
 
-        if (Check-Bitlocker) 
+        ElseIf (Get-BitLocker) 
 	        {
 		        Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!"
-		        Rebuild-WMIRepo
+		        Rebuild-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters
+		        Resync-Counters -SyncType Standard
 		
-		        if (Test-WMIRepo) 
+		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed!`nResetting Repository."
-				        Rebuild-WMIRepo_FullReset
+				        Rebuild-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters_Full
+				        Resync-Counters -SyncType Complete
 			        } 
-		        else 
+		        Else 
 			        {
 				        Write-Output "Bitlocker namespace verified successfully!"
 			        }
 			
 	        } 
 
-        if (Verify-WMIEvents) 
+        If (Verify-WMIEvents) 
 	        {
-		        Write-Output "WMI events (2003 or 5612) detected in the last 30 days.`nRebuilding WMI repository.."
-		        Rebuild-WMIRepo
+		        Write-Output "WMI Error/Warning events have been detected in the last 30 days.`nRebuilding WMI repository.."
+		        Rebuild-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters
+		        Resync-Counters -SyncType Standard
 		
-		        if (Test-WMIRepo) 
+		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed - performing reset"
-				        Rebuild-WMIRepo_FullReset
+				        Rebuild-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters_Full
+				        Resync-Counters -SyncType Complete
 			        } 
-		        else 
+		        Else 
 			        {
 				        Write-Output "`nNo relevant WMI events found in the last 30 days."
 			        }
 				
 	        }
 
-        if (Verify-PerfLib) 
+        If (Verify-PerfLib) 
 	        {
 		        Write-Output "PerfLib errors found.`nRe-Registering Associated dll's."
 		        cd C:\Windows\System32
@@ -527,7 +573,7 @@ Function Main
 		        cmd /c "regsvr32 C:\Windows\System32\sysmain.dll /s"
                 cmd /c "regsvr32 C:\Windows\System32\wbem\WmiApRpl.dll /s"
             } 
-        else 
+        Else 
 	        { 
                 Write-OutPut "Verification Completed.`nNo Errors Found"
 	        }
