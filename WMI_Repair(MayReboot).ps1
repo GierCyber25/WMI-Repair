@@ -1,6 +1,105 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: 11/1/2025 1:43 AM
+# Last Updated: 11/18/2025 
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
+
+# Logging Section: currently WIP
+$date = Get-Date
+
+# Initial detection and setup for logging.
+function loggingSetup
+    {
+        $getUser = get-childitem env:\userprofile | select-object -expandproperty value
+        $usrPath_OneDrive = $getUser + "\OneDrive\Desktop"
+        $usrPath = $getUser + "\Desktop"
+
+        $pathError = "Error: User path could not be found!"
+        $logFile = "WMI_Repair_Log.txt"
+
+        try
+            {
+                if (Test-Path -Path $usrPath_OneDrive)
+                    {
+                        Write-Host "OneDrive detected`nSetting up logfile accordingly.."
+                        $usrPth = $usrPath_OneDrive                    
+                    }
+                elseif (Test-Path -Path $usrPath)
+                    {
+                        Write-Host "Normal user path detected!`nSetting up logfile.."
+                        $usrPth = $usrPath
+                    }
+                else
+                    {
+                        throw $pathError
+                    }
+            }
+        catch
+            {
+                if ($_ -match $pathError)
+                    {
+                        New-Item "C:\WMI Repair Logs" -ItemType "Directory"
+                        $usrPth = $False
+                    }
+            }
+        
+
+        if ($usrPth -ne $false)
+            {
+                $usrLogPath = $usrPth+"\WMI_Repair_Log.txt"
+                
+                $test = Test-Path -Path $usrLogPath
+
+                if ($test -eq $true)
+                    {
+                        Write-Host "Log file detected"
+                        Add-Content -Path $usrLogPath -Value "-------WMI Repair Script Log-------`n($date)"
+                        return $logPath
+                    }
+                if ($test -eq $false)
+                    {
+                        New-Item -Path $usrPth -Name "WMI_Repair_Log.txt" -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)" 
+                    }
+            }
+
+        if ($usrPth -eq $false)
+            {
+                $logFolder = "C:\WMI Repair Logs"
+                $logFilePath = "C:\WMI Repair Logs\WMI_Repair_Log.txt"
+                $test = Test-Path -Path $logFile
+
+                if ($test -eq $true)
+                    {
+                        Add-Content -Path $logFolder -Name $logFile
+                    }
+            }
+         
+        
+    }
+
+Function UnrecoverableScriptFailure
+    {
+        param 
+            ( 
+                [string]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
+                [string]$logPath
+            )
+        
+        Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
+        Write-Output "Unrecoverable Script Failure Detected!`nError: ($ErrorMessage)" | Out-File -FilePath $logPath -Append 
+        Start-Sleep -Seconds 30
+        Restart-Computer -Force
+        exit 1
+    }
+
+Function ScriptFailure_General
+    {
+        param ( [string]$ErrorMessage = "Unknown or Undefined error detected!" )
+        Write-Host "General Script Failure Detected"
+        Write-Output "General SCript Fail Detected!`nError: ($ErrorMessage)" | Out-File -FilePath
+    }
+
+# ------------------------------------------------------
+
+# Main script functions
 
 function Test-WMIRepo 
 	{
@@ -35,10 +134,10 @@ Function Verify-PerfLib
 		)
 		$since = (Get-Date).AddDays(-$DaysBack)
 		$found = Get-WinEvent -FilterHashtable @{
-			LogName   = 'Application'
-			Id        = 1008,1023
+			LogName   = 'Application';
+			Id        = '1008','1023';
 			StartTime = $since
-		} -MaxEvents 1 -ErrorAction SilentlyContinue
+		} -MaxEvents 50 -ErrorAction SilentlyContinue
 		return [bool]$found
 	}
 
@@ -85,7 +184,7 @@ function WmiApSrvChk
 Function Rebuild-WMIRepo
 	{
 		WmiApSrvChk
-		cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
+		cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
 		# Attempt to stop the WMI service
 		$CheckSvc = cmd /c "net stop winmgmt /y"
 		if ($CheckSvc -match "could not be stopped.") 
@@ -95,13 +194,12 @@ Function Rebuild-WMIRepo
 				try 
 					{
 						Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
-						Write-Host "Service forcefully Stopped."
+						Write-Host "WMI Service forcefully Stopped."
 					} 
 				catch 
 					{
-						Write-Host "Service stop could not be forced. Device restart needed..."
-						Restart-Computer -Force
-						exit 1
+						Write-Host "WMI Service stop could not be forced. Restarting Device in 30 seconds" | Out-File -FilePath
+						
 					}
 			} 
 		elseif ($CheckSvc -match "service was stopped successfully") 
@@ -118,7 +216,7 @@ Function Rebuild-WMIRepo
 		cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
 		cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
 		cmd /c "for %i in (*.exe) do %i /regserver"
-		cmd /c "regsvr32 wmisvc.dll /s"
+		cmd /c "regsvr32 C:\Windows\System32\wbem\wmisvc.dll /s"
 		cmd /c "wmiprvse /regserver"
 	}
 
@@ -132,15 +230,18 @@ Function Rebuild-WMIRepo_FullReset
 		if ($CheckSvc -match "could not be stopped.") 
 			{
 				Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
+                Start-Sleep -Seconds 2
 				# Attempt to forcefully stop the service
 				try 
 					{
 						Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
 						Write-Host "Service forcefully restarted."
+                        Start-Sleep -Seconds 2
 					} 
 				catch 
 					{
-						Write-Host "Service stop could not be forced. Device restart needed..."
+						Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
+                        Start-Sleep -Seconds 30
 						Restart-Computer -Force
 						exit 1
 					}
@@ -164,7 +265,7 @@ Function Rebuild-WMIRepo_FullReset
 
 Function Recreate-WmiApSrv 
 	{
-		taskkill /im wmi* /f /t;taskkill /im mmc* /f /t
+		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
 		Copy-Item -Path "C:\Windows\WinSxS\**\wmiapsrv.exe" -Destination "C:\Windows\System32\wbem\wmiapsrv.exe"
 		sc.exe create WmiApSrv binPath= "C:\Windows\System32\wbem\wmiapsrv.exe" DisplayName= "WMI Performance Adapter" type= "own" start= "demand" error= "normal" obj= "LocalSystem"
 		sc.exe start WmiApSrv
@@ -183,7 +284,6 @@ Function Resync-Counters
 		do {
 			$attempt++
 			try {
-					:outer
 					"C:\Windows\system32", "C:\Windows\SysWOW64" |
 					ForEach-Object 
 						{
@@ -196,20 +296,18 @@ Function Resync-Counters
 										} 
 									elseif ($_ -match $successPattern)
 										{
-											Write-Host "Rebuild Successful"
-											break outer
+											Write-Output "Rebuild Successful"
 										} 
 								} 
 						}
 					#sync counters if lodctr succeed
-					
 					& cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
 					Write-Host "Resync Successful!"
 					return $True
 				}
 			catch 
 				{
-					if ($_.Exception.Message -match "Error: Unable to rebuild performance counter setting from system backup store, error code is 2") 
+					if ($_.Exception.Message -match $errorPattern) 
 						{
 							Write-Host "Rebuild Error Detected, retrying (Attempt $attempt)"
 							if ($attempt -lt $maxAttempts)
@@ -220,7 +318,6 @@ Function Resync-Counters
 								{
 									Write-Host "Failed to rebuild performance counters after $maxAttempts attempts. Rebooting computer!"
 									Write-Error $_.Exception.Message
-									Restart-Computer
 									Return $false
 								}
 						}
@@ -232,6 +329,12 @@ Function Resync-Counters
 						}
 				}
 			} while ($attempt -lt $maxAttempts)
+
+		# Set WMI Services back to normal and start them
+		sc.exe config "winmgmt" start= "auto"
+		sc.exe config "wmiApSrv" start= "auto"
+		cmd /c "net start winmgmt"
+		cmd /c "net start wmiApSrv"
 	}
 
 Function Resync-Counters_Full 
@@ -247,7 +350,6 @@ Function Resync-Counters_Full
 		do {
 			$attempt++
 			try {
-					:outer
 					"C:\Windows\system32", "C:\Windows\SysWOW64" |
 					ForEach-Object 
 						{
@@ -260,20 +362,19 @@ Function Resync-Counters_Full
 										} 
 									elseif ($_ -match $successPattern)
 										{
-											Write-Host "Rebuild Successful"
-											break outer
+											Write-Output "Rebuild Successful"
+
 										} 
-								} 
+								}
 						}
 					#sync counters if lodctr succeed
-					
 					& cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
+            
 					Write-Host "Resync Successful!"
-					return $True
 				}
 			catch 
 				{
-					if ($_.Exception.Message -match "Error: Unable to rebuild performance counter setting from system backup store, error code is 2") 
+					if ($_.Exception.Message -match $errorPattern)
 						{
 							Write-Host "Rebuild Error Detected, retrying (Attempt $attempt)"
 							if ($attempt -lt $maxAttempts)
@@ -282,18 +383,14 @@ Function Resync-Counters_Full
 								}
 							else
 								{
-									Write-Host "Failed to rebuild performance counters after $maxAttempts attempts. Rebooting computer!"
+									Write-Host "Failed to rebuild performance counters after $maxAttempts attempts."
 									Write-Error $_.Exception.Message
-									Restart-Computer
-									Return $false
 								}
 							
 						}
 					else 
 						{
-							Write-Error $_.Exception.Message
-							Restart-Computer
-							return $false
+							Write-Error -Message "Unexpected error has occurred ($_.Exception.Message)"
 						}
 				}
 			} while ($attempt -lt $maxAttempts)
@@ -306,79 +403,82 @@ Function Resync-Counters_Full
 	}
 	
 
-
-Write-Host "Beginning Initial Verification of WMI"
-if (Test-WMIRepo) 
-	{
-		Write-Host "Repository inconsistent – attempting salvage..."
-		Rebuild-WMIRepo
-		cmd /c "winmgmt /salvagerepository"
-		Resync-Counters
+Function Main
+    {
+        Write-Host "Beginning Initial Verification of WMI"
+        if (Test-WMIRepo) 
+	        {
+		        Write-Host "Repository inconsistent – attempting salvage..."
+		        Rebuild-WMIRepo
+		        cmd /c "winmgmt /salvagerepository"
+		        Resync-Counters
 		
-		if (Test-WMIRepo) 
-			{
-				Write-Output "Salvage failed – performing full reset"
-				Rebuild-WMIRepo_FullReset
-				cmd /c "winmgmt /resetrepository"
-				Resync-Counters_Full
-			} 
-		else 
-			{
-				Write-Output "Repository passed initial verification.`nReviewing machine logs for relevant Events."
-			}
+		        if (Test-WMIRepo) 
+			        {
+				        Write-Output "Salvage failed – performing full reset"
+				        Rebuild-WMIRepo_FullReset
+				        cmd /c "winmgmt /resetrepository"
+				        Resync-Counters_Full
+			        } 
+		        else 
+			        {
+				        Write-Output "Repository passed initial verification.`nReviewing machine logs for relevant Events."
+			        }
 			
-	}
+	        }
 
-if (Check-Bitlocker) 
-	{
-		Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!"
-		Rebuild-WMIRepo
-		cmd /c "winmgmt /salvagerepository"
-		Resync-Counters
+        if (Check-Bitlocker) 
+	        {
+		        Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!"
+		        Rebuild-WMIRepo
+		        cmd /c "winmgmt /salvagerepository"
+		        Resync-Counters
 		
-		if (Test-WMIRepo) 
-			{
-				Write-Output "Salvage failed!`nResetting Repository."
-				Rebuild-WMIRepo_FullReset
-				cmd /c "winmgmt /resetrepository"
-				Resync-Counters_Full
-			} 
-		else 
-			{
-				Write-Output "Bitlocker namespace verified successfully!"
-			}
+		        if (Test-WMIRepo) 
+			        {
+				        Write-Output "Salvage failed!`nResetting Repository."
+				        Rebuild-WMIRepo_FullReset
+				        cmd /c "winmgmt /resetrepository"
+				        Resync-Counters_Full
+			        } 
+		        else 
+			        {
+				        Write-Output "Bitlocker namespace verified successfully!"
+			        }
 			
-	} 
+	        } 
 
-if (Verify-WMIEvents) 
-	{
-		Write-Output "WMI events (2003 or 5612) detected in the last 30 days.`nRebuilding WMI repository.."
-		Rebuild-WMIRepo
-		cmd /c "winmgmt /salvagerepository"
-		Resync-Counters
+        if (Verify-WMIEvents) 
+	        {
+		        Write-Output "WMI events (2003 or 5612) detected in the last 30 days.`nRebuilding WMI repository.."
+		        Rebuild-WMIRepo
+		        cmd /c "winmgmt /salvagerepository"
+		        Resync-Counters
 		
-		if (Test-WMIRepo) 
-			{
-				Write-Output "Salvage failed - performing reset"
-				Rebuild-WMIRepo_FullReset
-				cmd /c "winmgmt /resetrepository"
-				Resync-Counters_Full
-			} 
-		else 
-			{
-				Write-Output "`nNo relevant WMI events found in the last 30 days."
-			}
+		        if (Test-WMIRepo) 
+			        {
+				        Write-Output "Salvage failed - performing reset"
+				        Rebuild-WMIRepo_FullReset
+				        cmd /c "winmgmt /resetrepository"
+				        Resync-Counters_Full
+			        } 
+		        else 
+			        {
+				        Write-Output "`nNo relevant WMI events found in the last 30 days."
+			        }
 				
-	}
+	        }
 
-if (Verify-PerfLib) 
-	{
-		Write-Output "PerfLib errors found.`nRe-Registering Associated dll's."
-		cd C:\Windows\System32
-		cmd /c "regsvr32 bitsperf.dll /s"
-		cmd /c "regsvr32 sysmain.dll /s"
-    } 
-else 
-	{ 
-        Write-OutPut "Verification Completed.`nNo Errors Found"
-	}
+        if (Verify-PerfLib) 
+	        {
+		        Write-Output "PerfLib errors found.`nRe-Registering Associated dll's."
+		        cd C:\Windows\System32
+		        cmd /c "regsvr32 C:\Windows\System32\bitsperf.dll /s"
+		        cmd /c "regsvr32 C:\Windows\System32\sysmain.dll /s"
+                cmd /c "regsvr32 C:\Windows\System32\wbem\WmiApRpl.dll /s"
+            } 
+        else 
+	        { 
+                Write-OutPut "Verification Completed.`nNo Errors Found"
+	        }
+    }
