@@ -1,19 +1,31 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: 11/18/2025 
+# Last Updated: 11/18/2025 9:42 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
-# Logging Section: currently WIP
+
+
+# --------------------------------------------------------Logging Section--------------------------------------------------------
+##################### logging is still a work in progress
+
 $date = Get-Date
 
-# Initial detection and setup for logging.
-function loggingSetup
+function Get-Time {
+    Get-Date -Format "HH:mm:ss"
+}
+
+##################### Initial detection and setup for logging.
+
+function LogFile
     {
+        #################### variables
         $getUser = get-childitem env:\userprofile | select-object -expandproperty value
-        $usrPath_OneDrive = $getUser + "\OneDrive\Desktop"
-        $usrPath = $getUser + "\Desktop"
+        $usrPath_OneDrive = $getUser + "\OneDrive\Desktop\"
+        $usrPath = $getUser + "\Desktop\"
 
         $pathError = "Error: User path could not be found!"
         $logFile = "WMI_Repair_Log.txt"
+        
+        #################### Test user desktop path with error handling
 
         try
             {
@@ -22,11 +34,13 @@ function loggingSetup
                         Write-Host "OneDrive detected`nSetting up logfile accordingly.."
                         $usrPth = $usrPath_OneDrive                    
                     }
+                
                 elseif (Test-Path -Path $usrPath)
                     {
                         Write-Host "Normal user path detected!`nSetting up logfile.."
                         $usrPth = $usrPath
                     }
+                
                 else
                     {
                         throw $pathError
@@ -36,44 +50,65 @@ function loggingSetup
             {
                 if ($_ -match $pathError)
                     {
-                        New-Item "C:\WMI Repair Logs" -ItemType "Directory"
                         $usrPth = $False
                     }
             }
         
+        #################### Testing for log existence under user desktop
 
         if ($usrPth -ne $false)
             {
-                $usrLogPath = $usrPth+"\WMI_Repair_Log.txt"
-                
+                $usrLogPath = $usrPth+$logFile
                 $test = Test-Path -Path $usrLogPath
 
                 if ($test -eq $true)
                     {
                         Write-Host "Log file detected"
                         Add-Content -Path $usrLogPath -Value "-------WMI Repair Script Log-------`n($date)"
-                        return $logPath
+                        return $usrLogPath
                     }
+
                 if ($test -eq $false)
                     {
-                        New-Item -Path $usrPth -Name "WMI_Repair_Log.txt" -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)" 
+                        #################### Create log file if it does not exist
+                        New-Item -Path $usrPth -Name $logFile -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)" 
+                        return $usrLogPath
                     }
             }
+
+        #################### Test for log existence if user path not findable
 
         if ($usrPth -eq $false)
             {
                 $logFolder = "C:\WMI Repair Logs"
-                $logFilePath = "C:\WMI Repair Logs\WMI_Repair_Log.txt"
-                $test = Test-Path -Path $logFile
+                $logFilePath = $logFolder + $logFile
+                $test1 = Test-Path -Path $logFolder
+                $test2 = Test-Path -Path $logFilePath
 
-                if ($test -eq $true)
+                if ($test1 -eq $true)
                     {
-                        Add-Content -Path $logFolder -Name $logFile
+                        if ($test2 -eq $true)
+                            {
+                                Write-Host "Pre-existing log found in alternative location!"
+                                Add-Content -Path $logFilePath -Value "-------WMI Repair Script Log-------`n($date)"
+                                return $logFilePath
+
+                            }
+                    }
+                
+                elseif ($test1 -eq $false)
+                    {
+                        Write-Host "Pre-existing log file not found"
+                        New-Item -Path $logFolder -ItemType "Directory"
+                        New-Item -path $logFolder -Name $logFile -ItemType "File" -Value "-------WMI Repair Script Log-------`n($date)"
+
+                        return $logFilePath
                     }
             }
          
         
     }
+
 
 Function UnrecoverableScriptFailure
     {
@@ -84,22 +119,32 @@ Function UnrecoverableScriptFailure
             )
         
         Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Write-Output "Unrecoverable Script Failure Detected!`nError: ($ErrorMessage)" | Out-File -FilePath $logPath -Append 
+        Add-Content -Path $logPath -Value "[$(Get-Time)]: Unrecoverable script failure detected!`nError: ($ErrorMessage)" 
         Start-Sleep -Seconds 30
         Restart-Computer -Force
         exit 1
     }
 
+
 Function ScriptFailure_General
     {
-        param ( [string]$ErrorMessage = "Unknown or Undefined error detected!" )
+        param 
+            ( 
+                [string]$ErrorMessage = "Unknown or Undefined error detected!",
+                [string]$logPath 
+            )
         Write-Host "General Script Failure Detected"
-        Write-Output "General SCript Fail Detected!`nError: ($ErrorMessage)" | Out-File -FilePath
+        Add-Content -Path $logPath -Value "[$(Get-Time)]: General script failure detected!`nError: ($ErrorMessage)"
     }
 
-# ------------------------------------------------------
+function debugLog
+    {
+        # To Do: add logic
+    }
 
-# Main script functions
+# --------------------------------------------------------Main script functions--------------------------------------------------------
+
+
 
 function Test-WMIRepo 
 	{
@@ -137,7 +182,7 @@ Function Verify-PerfLib
 			LogName   = 'Application';
 			Id        = '1008','1023';
 			StartTime = $since
-		} -MaxEvents 50 -ErrorAction SilentlyContinue
+		} -MaxEvents 1 -ErrorAction SilentlyContinue
 		return [bool]$found
 	}
 
@@ -183,13 +228,17 @@ function WmiApSrvChk
 
 Function Rebuild-WMIRepo
 	{
-		WmiApSrvChk
+        $svcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
+		
+        WmiApSrvChk
 		cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
-		# Attempt to stop the WMI service
+		
+        # Attempt to stop the WMI service
 		$CheckSvc = cmd /c "net stop winmgmt /y"
 		if ($CheckSvc -match "could not be stopped.") 
 			{
 				Write-Host "Windows Management Instrumentation couldn't be stopped.`nAttempting to forcefully restart the service."
+                
 				# Attempt to forcefully restart the service
 				try 
 					{
@@ -198,7 +247,8 @@ Function Rebuild-WMIRepo
 					} 
 				catch 
 					{
-						Write-Host "WMI Service stop could not be forced. Restarting Device in 30 seconds" | Out-File -FilePath
+						Write-Host "WMI Service stop could not be forced."
+                        UnrecoverableScriptFailure -ErrorMessage $svcError -logPath LogFile
 						
 					}
 			} 
