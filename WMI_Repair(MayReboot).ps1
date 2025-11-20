@@ -1,10 +1,11 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: 11/18/2025 9:42 PM
+# Last Updated: 11/19/2025 idk o'clock
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
 
-
 # --------------------------------------------------------Logging Section--------------------------------------------------------
+
+
 ##################### logging is still a work in progress
 
 function Date-Stamp {
@@ -58,7 +59,7 @@ function Log-File
             }
         
         #################### Testing for log existence under user desktop
-
+        #################### TODO: add handling for pre-existing logs so that the date-stamp is not added everytime the program is ran within the same day
         If ($UsrPth -ne $False)
             {
                 $UsrLogPath = $UsrPth+$LogFile
@@ -67,20 +68,20 @@ function Log-File
                 If ($TestUserPath -eq $True)
                     {
                         Write-Host "Log file detected"
-                        Write-Log -LogPath $UsrLogPath -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
+                        Write-Log -LogPath $UsrLogPath -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
                         Return $UsrLogPath
                     }
 
                 If ($TestUserPath -eq $False)
                     {
                         #################### Create log file If it does not exist
-                        New-Item -Path $UsrPth -Name $LogFile -ItemType "File" -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------" 
+                        New-Item -Path $UsrPth -Name $LogFile -ItemType "File" -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------" 
                         Return $UsrLogPath
                     }
             }
 
         #################### Test for log existence If user path not findable
-
+        #################### TODO: add the same handling mentioned above but for non-standard log location
         If ($UsrPth -eq $False)
             {
                 $LogFolder = "C:\WMI Repair Logs"
@@ -93,7 +94,7 @@ function Log-File
                         If ($TestFilePath -eq $True)
                             {
                                 Write-Host "Pre-existing log found in alternative location!"
-                                Write-Log -LogPath $LogFilePath -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
+                                Write-Log -LogPath $LogFilePath -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
                                 Return $LogFilePath
 
                             }
@@ -103,7 +104,7 @@ function Log-File
                     {
                         Write-Host "Pre-existing log file not found"
                         New-Item -Path $LogFolder -ItemType "Directory"
-                        New-Item -path $LogFolder -Name $LogFile -ItemType "File" -Value "--------------WMI Repair Script Log: [$(Date-Stamp)]--------------"
+                        New-Item -path $LogFolder -Name $LogFile -ItemType "File" -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
 
                         Return $LogFilePath
                     }
@@ -118,12 +119,12 @@ Function Write-HardFailure
     #################### Function for unrecoverable failures requiring a reboot.
         param 
             ( 
-                [string]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
+                [Parameter(ValueFromPipeline = $True)]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
                 [string]$LogPath
             )
         
         Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Add-Content -Path $LogPath -Value "[$(Get-Time)]: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
+        Add-Content -Path $LogPath -Value "[$(Get-Time)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
         Start-Sleep -Seconds 30
 
         #################### send windows notif sound to computer speakers before reboot
@@ -133,39 +134,41 @@ Function Write-HardFailure
     }
 
 
-Function Write-GeneralFailure
-    {
-    #################### general failures, usually no reboot required. (Error handling should already be in place.)
-        param 
-            (
-                [Parameter(ValueFromPipeline = $True)]$ErrorMessage = "Unknown or Undefined error detected!",
-                [string]$LogPath 
-            )
-        Write-Host "General Script Failure Detected"
-        Add-Content -Path $LogPath -Value "[$(Get-Time)]: General script failure detected!`n`tError: $ErrorMessage"
-    }
-
 function Write-Log
     {
-    #################### General Logging function: debug or information
+    #################### General Failures and General Logs: debug, information, and warning.
+    #################### usually no reboot required. (Error handling should already be in place.)
         [CmdletBinding()]
         param 
             (
-                [Parameter(ValueFromPipeline = $True)]$Message,
-                [string]$Type = "Info", #################### Debug, Info, Warning (default)
+                [Parameter(ValueFromPipeline = $True)]$Message = "Unknown or Undefined error detected!",
+
+                [ValidateSet("Info", "Debug", "Warning")]
+                [string]$Type = "Info", #################### Debug, Info (default), Warning 
                 [string]$LogPath
             )
-
-        process{
-            $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
-            Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : $LogMessage"
-        }
+        
+        If ($Type -eq "Debug")
+            {
+                Write-Host "General Script Failure Detected"
+                process
+                    {
+                        $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
+                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : General script failure detected!`n`tError: $LogMessage"
+                    }
+            }
+        Else
+            {
+                process
+                    {
+                        $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
+                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : $LogMessage"
+                    }
+            }
     }
 
 
-
-# --------------------------------------------------------Main script functions--------------------------------------------------------
-
+# --------------------------------------------------------Main Functions--------------------------------------------------------
 
 
 function Test-WMIRepo {
@@ -216,7 +219,7 @@ Function Get-WmiApSrv
 		$ServiceName = 'wmiapsrv'
 		$RegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
 
-		# 1. Check If DeleteFlag exists and is set status: 1
+		# 1. Check If DeleteFlag exists and is set. function status set to 1
 		Try 
 			{
 				$Flag = Get-ItemProperty -Path $RegPath -Name DeleteFlag -ErrorAction Stop
@@ -231,12 +234,12 @@ Function Get-WmiApSrv
 		$Svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 		If ($null -eq $Svc) 
 			{
-				# Service does not exist: status 2
+				# Service does not exist: function status set to 2
 				Return 2
 			} 
 		Else 
 			{
-				# Service exists and isn't marked: status 3
+				# Service exists and isn't marked: function status set to 3
 				Return 3
 			}
 	}
@@ -322,7 +325,8 @@ Function Rebuild-WMIRepo
 				        Try 
 					        {
 						        Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
-						        Write-Host "Service forcefully restarted." | Write-Log -LogPath (Log-File)
+						        Write-Host "Service forcefully restarted."
+                                Write-Log -LogPath (Log-File) -Message "WMI Services forcefully restarted"
                                 Start-Sleep -Seconds 2
 					        } 
 				        Catch 
@@ -406,7 +410,7 @@ Function Resync-Counters
 					        If ($_.Exception.Message -match $ErrorPattern) 
 						        {
 							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
-                                    Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Debug -LogPath (Log-File)
+                                    
 							        If ($Attempt -lt $MaxAttempts)
 								        {
 									        Start-Sleep -Seconds 2
@@ -414,6 +418,7 @@ Function Resync-Counters
 							        Else
 								        {
 									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts. Rebooting computer!"
+                                            Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Debug -LogPath (Log-File)
 									        Write-Error $_.Exception.Message
 									        Return $False
 								        }
@@ -463,7 +468,7 @@ Function Resync-Counters
 					        #sync counters If lodctr succeed
 					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
 					        Write-Host "Resync Successful!"
-                            Write-Log 
+                            Write-Log -LogPath (Log-File) -Type Info -Message "Successfully re-synced performance counters"
 				        }
 			        Catch 
 				        {
@@ -498,6 +503,7 @@ Function Resync-Counters
             }
 	}
 	
+# -------------------------------------------------------- Main --------------------------------------------------------
 
 Function Main
     {
