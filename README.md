@@ -1,6 +1,8 @@
 # Windows Management Instrumentation Repair 
 // Copyright (c) 2025 Carter Gierhart
 // Licensed under the MIT License. See LICENSE file for details.
+# script currently broken, do not use.
+
 This PowerShell script is designed for manual execution or integration into automation workflows to verify and repair components associated with Windows Management Instrumentation (WMI).
 
 
