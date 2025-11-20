@@ -1,24 +1,139 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: 11/19/2025 idk o'clock
+# Last Updated: Thursday, November 20, 2025 3:15:59 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
+# --------------------------------------------------------To Do/Implement--------------------------------------------------------
+# --------------------------------------------------------testing for each perfcounter--------------------------------------------------------
+
+<# sfc /verifyfile=C:\Windows\System32\%dllname%.dll
+Test existence:
+Test-Path "C:\path\to\dll"
+
+
+if path returns true:
+try lodctr /e:%dllname%
+
+match (Error: unable to enable service "%dllname%"; error code is 2.)
+Get-Service "%dllname%"
+
+if disabled:
+Set-Service -Name "%dllname%" -StartupType Automatic
+Start-Service -Name "%dllname%"
+
+Verify Registry Entry:
+Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
+
+if entry is not found create key and add correct values
+
+# --------------------------------------------------------Sysmain dll perfcounters/registration--------------------------------------------------------
+
+$sysmainPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
+
+# Create key if missing
+if (-not (Test-Path $sysmainPerfKey)) {
+    New-Item -Path $sysmainPerfKey -Force
+}
+
+# Set correct values
+Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "sysmain.dll"
+Set-ItemProperty -Path $sysmainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
+Set-ItemProperty -Path $sysmainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
+Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
+
+Write-Host "SysMain Performance key has been created/reset."
+
+# --------------------------------------------------------LSM perf counters/registration--------------------------------------------------------
+
+# Reset LSM Performance registry values
+$lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
+
+# Ensure key exists
+if (-not (Test-Path $lsmPerfKey)) {
+    New-Item -Path $lsmPerfKey -Force
+}
+
+# Set correct values
+Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+
+# Remove invalid entries
+Remove-ItemProperty -Path $lsmPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $lsmPerfKey -Name "Collect Timeout" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $lsmPerfKey -Name "Open Timeout" -ErrorAction SilentlyContinue
+
+Write-Host "Registry values for LSM Performance key have been reset."
+
+# Rebuild counters
+Write-Host "Rebuilding performance counters..."
+
+Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
+
+# --------------------------------------------------------BITS perf counters/registration--------------------------------------------------------
+
+$bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
+if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
+Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "bitsperf.dll"
+Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
+Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
+Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
+
+# --------------------------------------------------------WMI perf counters and registration--------------------------------------------------------
+
+$wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
+
+# Ensure key exists
+if (-not (Test-Path $wmiPerfKey)) {
+    New-Item -Path $wmiPerfKey -Force
+}
+
+# Set correct values
+Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "wbem\WmiApRpl.dll"
+Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
+Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
+Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+
+# Remove invalid entries
+Remove-ItemProperty -Path $wmiPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $wmiPerfKey -Name "1008" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $wmiPerfKey -Name "First Counter" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $wmiPerfKey -Name "First Help" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $wmiPerfKey -Name "Last Counter" -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path $wmiPerfKey -Name "Last Help" -ErrorAction SilentlyContinue
+
+Write-Host "WmiApRpl Performance key has been reset."
+-------------------------------------------------------------------
+TermService repair perflib
+$termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
+if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
+Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "perfts.dll"
+Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+------------------------------------------------------------------------
+
+finally do this:
+lodctr /R 
+sfc /scannow #>
 
 # --------------------------------------------------------Logging Section--------------------------------------------------------
 
 
 ##################### logging is still a work in progress
 
-function Date-Stamp {
-    Get-Date -Format "MM/DD/YYYY"
+Function Date-Stamp {
+    Get-Date -Format "MM/dd/yyyy"
 }
 
-function Get-Time {
+Function Get-Time {
     Get-Date -Format "HH:mm:ss"
 }
 
 ##################### Initial detection and setup for logging.
-
-function Log-File
+<#
+Function Log-File
     {
         #################### Note: when using this function for logpath you must write it as (Log-File) i.e. <command> | Write-Log -LogPath (Log-File)
         #################### Variable initialization
@@ -114,7 +229,7 @@ function Log-File
     }
 
 
-Function Write-HardFailure
+Function Write-Failure
     {
     #################### Function for unrecoverable failures requiring a reboot.
         param 
@@ -134,7 +249,7 @@ Function Write-HardFailure
     }
 
 
-function Write-Log
+Function Write-Log
     {
     #################### General Failures and General Logs: debug, information, and warning.
     #################### usually no reboot required. (Error handling should already be in place.)
@@ -150,11 +265,11 @@ function Write-Log
         
         If ($Type -eq "Debug")
             {
-                Write-Host "General Script Failure Detected"
+                Write-Host "General Script Error Detected"
                 process
                     {
                         $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
-                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : General script failure detected!`n`tError: $LogMessage"
+                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
                     }
             }
         Else
@@ -166,12 +281,12 @@ function Write-Log
                     }
             }
     }
-
+#>
 
 # --------------------------------------------------------Main Functions--------------------------------------------------------
 
 
-function Test-WMIRepo {
+Function Test-WMIRepo {
 		Return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
 	}
 
@@ -180,6 +295,27 @@ Function Get-BitLocker {
 		Return (Manage-Bde -Status c:) -match "invalid namespace"
 	}
 
+Function Edit-Winmgmt
+    {
+        
+        [CmdletBinding()]
+
+        param
+            (
+                
+                #################### Implement function parameters: 
+                ########################################  checksvc, ConfigSvc(enabled/disabled), Stop, Start
+            )
+        cmd /c "net stop winmgmt /y" TODO: implement full reset and standard reset
+     
+        #################### Insert standard logic here "if (standard)" return (cmd /c "net stop winmgmt /y") -
+        sc.exe config "winmgmt" start= "auto"
+        sc.exe config "wmiApSrv" start= "auto"
+        cmd /c "net start winmgmt"
+        cmd /c "net start wmiApSrv"
+        #################### Insert complete logic here "if (complete) etc"
+    
+    }
 
 Function Verify-WMIEvents 
 	{
@@ -199,6 +335,7 @@ Function Verify-WMIEvents
 
 Function Verify-PerfLib 
 	{
+
 		[CmdletBinding()]
 		param (
 			[int]$DaysBack = 3
@@ -245,7 +382,7 @@ Function Get-WmiApSrv
 	}
 
 
-function Resolve-WmiApSrv
+Function Resolve-WmiApSrv
 	{
     #################### parse output of Get-WmiApSrv to determine next steps
 		switch (Get-WmiApSrv) 
@@ -288,8 +425,8 @@ Function Rebuild-WMIRepo
 					        } 
 				        Catch 
 					        {
-						        Write-Host "WMI Service stop could not be forcefully stopped.."
-                                Write-HardFailure -ErrorMessage $SvcError -LogPath (Log-File)
+						        Write-Host "Windows Management Instrumentation Service (winmgmt) could not be forcefully stopped.."
+                                Write-Failure -ErrorMessage $SvcError -LogPath (Log-File)
 					        }
 			        } 
 		        ElseIf ($CheckSvc -match "service was stopped successfully") 
@@ -433,10 +570,7 @@ Function Resync-Counters
 			        } while ($Attempt -lt $MaxAttempts)
 
 		        # Set WMI Services back to normal and start them
-		        sc.exe config "winmgmt" start= "auto"
-		        sc.exe config "wmiApSrv" start= "auto"
-		        cmd /c "net start winmgmt"
-		        cmd /c "net start wmiApSrv"
+                Set-WMIService
             }
 ############################################################
 		if ($SyncType -eq "Complete")
