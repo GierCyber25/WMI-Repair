@@ -1,10 +1,11 @@
 # Windows Management Instrumentation Repair 
 // Copyright (c) 2025 Carter Gierhart
 // Licensed under the MIT License. See LICENSE file for details.
-This is a small PowerShell script designed to be used either manually or within automation to help verify and repair proponents and components belonging to the Windows Management Instrumentation. 
+This PowerShell script is designed for manual execution or integration into automation workflows to verify and repair components associated with Windows Management Instrumentation (WMI).
+
 
 ### Manual Use Case
-Since powershell scripts are disabled by default scripts must be run with a temporary change to execution policy.
+Since powershell scripts are disabled by default, scripts must be run with a temporary change to execution policy.
 In this instance if the script were placed at the root of your C drive the command would be run like so:
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force; C:\WMI_Repair(MayReboot).ps1
 
