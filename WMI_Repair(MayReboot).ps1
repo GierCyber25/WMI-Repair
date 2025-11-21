@@ -2,125 +2,10 @@
 # Last Updated: Thursday, November 20, 2025 10:16:07 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
-# --------------------------------------------------------To Do/Implement--------------------------------------------------------
-# --------------------------------------------------------Testing for each perfcounter--------------------------------------------------------
+# -------------------------------------------------------- To Do/Implement --------------------------------------------------------
 
-<# sfc /verifyfile=C:\Windows\System32\%dllname%.dll
-Test existence:
-Test-Path "C:\path\to\dll"
+# -------------------------------------------------------- Logging Functions --------------------------------------------------------
 
-
-if path returns true:
-try lodctr /e:%dllname%
-
-match (Error: unable to enable service "%dllname%"; error code is 2.)
-Get-Service "%dllname%"
-
-if disabled:
-Set-Service -Name "%dllname%" -StartupType Automatic
-Start-Service -Name "%dllname%"
-
-Verify Registry Entry:
-Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
-
-if entry is not found create key and add correct values
-
-# --------------------------------------------------------Sysmain dll perfcounters/registration--------------------------------------------------------
-
-$sysmainPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
-
-# Create key if missing
-if (-not (Test-Path $sysmainPerfKey)) {
-    New-Item -Path $sysmainPerfKey -Force
-}
-
-# Set correct values
-Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
-Set-ItemProperty -Path $sysmainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
-Set-ItemProperty -Path $sysmainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
-Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
-
-Write-Host "SysMain Performance key has been created/reset."
-
-# --------------------------------------------------------LSM perf counters/registration--------------------------------------------------------
-
-# Reset LSM Performance registry values
-$lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
-
-# Ensure key exists
-if (-not (Test-Path $lsmPerfKey)) {
-    New-Item -Path $lsmPerfKey -Force
-}
-
-# Set correct values
-Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
-
-# Remove invalid entries
-Remove-ItemProperty -Path $lsmPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $lsmPerfKey -Name "Collect Timeout" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $lsmPerfKey -Name "Open Timeout" -ErrorAction SilentlyContinue
-
-Write-Host "Registry values for LSM Performance key have been reset."
-
-# Rebuild counters
-Write-Host "Rebuilding performance counters..."
-
-Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
-
-# --------------------------------------------------------BITS perf counters/registration--------------------------------------------------------
-
-$bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
-if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
-Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
-Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
-Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
-Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
-Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-
-# --------------------------------------------------------WMI perf counters and registration--------------------------------------------------------
-
-$wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
-
-# Ensure key exists
-if (-not (Test-Path $wmiPerfKey)) {
-    New-Item -Path $wmiPerfKey -Force
-}
-
-# Remove invalid entries
-$keepProps = @("Library","Open","Collect","Close")
-(Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
-    Where-Object { $_.Name -notin $keepProps } |
-    ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
-
-# Set correct values
-Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
-Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
-Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
-Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
-
-Write-Host "WmiApRpl Performance key has been reset."
--------------------------------------------------------------------
-TermService repair perflib
-$termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
-if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
-Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "perfts.dll"
-Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
-Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-------------------------------------------------------------------------
-
-finally do this:
-lodctr /R 
-sfc /scannow #>
-
-# --------------------------------------------------------Logging Section--------------------------------------------------------
-
-
-##################### logging is still a work in progress
 
 
 ##################### Initial detection and setup for logging.
@@ -134,7 +19,6 @@ Function Get-Time {
 
 Function Log-File
     {
-        #################### Note: when using this function for logpath you must write it as (Log-File) i.e. <command> | Write-Log -LogPath (Log-File)
         #################### Variable initialization
         $GetUser = (Get-ChildItem env:\userprofile).Value
         $UserPath_OneDrive = Join-Path $GetUser "OneDrive\Desktop"
@@ -187,7 +71,9 @@ Function Write-Failure
     #################### Function for unrecoverable failures requiring a reboot.
         param 
             ( 
-                [Parameter(ValueFromPipeline = $True)]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
+                [Parameter(ValueFromPipeline = $True)]
+                $ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
+                
                 [string]$LogPath = (Log-File)
             )
         
@@ -203,6 +89,7 @@ Function Write-Failure
 
 Function Write-Log
     {
+    
     #################### General Failures and General Logs: debug, information, and warning.
     #################### usually no reboot required. (Error handling should already be in place.)
         [CmdletBinding()]
@@ -234,7 +121,7 @@ Function Write-Log
             }
     }
 
-# --------------------------------------------------------Supporting Functions--------------------------------------------------------
+# -------------------------------------------------------- Supporting Functions --------------------------------------------------------
 
 Function Request-Reboot 
     {
@@ -312,6 +199,9 @@ Function Request-Reboot
         $form.ShowDialog()
     }
 
+
+# -------------------------------------------------------- Diagnostic Functions --------------------------------------------------------
+
 Function Test-WMIRepo {
 		Return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
 	}
@@ -321,7 +211,6 @@ Function Get-BitLocker {
 		Return (Manage-Bde -Status C:) -match "invalid namespace"
 	}
 
-# --------------------------------------------------------Main Functions--------------------------------------------------------
 
 Function Verify-WMIEvents 
 	{
@@ -351,7 +240,7 @@ Function Verify-PerfLib
 			LogName   = 'Application';
 			Id        = '1000','1008','1023','2003','1022','1017';
 			StartTime = $Since
-		} -MaxEvents 1 -ErrorAction SilentlyContinue
+		} -MaxEvents 10 -ErrorAction SilentlyContinue
 		Return [bool]$Found
 	}
 
@@ -400,6 +289,166 @@ Function Resolve-WmiApSrv
 			}
 	}
 
+# Testing for each perfcounter 
+Function Test-PerfCounters
+    {
+        param
+            (
+                [string]$DllPath,
+                [string]$TestPath,
+                [string]$GetService,
+                [string]$VerifyDll,
+                [string]$EnablePerf,
+                [string]$RegTest,
+                [string]$ParseEvents
+            )
+
+        If ($PSBoundParameters.ContainsKey('DllPath'))
+            {
+                # Insert Logic
+                # can PSCustom object not need.
+
+            }
+        <#sfc /verifyfile="$DllPath" /OFFLOGFILE=(Log-File)
+        
+        Test existence:
+        Test-Path $DllPath
+
+
+        if path returns true:
+        
+        try lodctr /e:%dllname%
+        match (Error: unable to enable service "%dllname%"; error code is 2.)
+        
+        Get-Service "%PerfSvc%"
+        if disabled:
+        Set-Service -Name "%PerfSvc%" -StartupType Automatic
+        Start-Service -Name "%dllname%"
+
+        Verify Registry Entry:
+        Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
+
+        if entry is not found pass false out of function so that the corrections can be performed.#>
+    }
+
+Function Repair-PerfCounters
+ {
+    param
+        (
+            [string]$Perflib
+        )
+    
+    $keepProps = @("Library","Open","Collect","Close")
+    
+    Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
+
+
+    If ($PSBoundParameters.ContainsKey('Perflib'))
+    {
+        # Sysmain dll perfcounters/registration
+
+        $sysmainPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
+
+        # Create key if missing
+        If (-not (Test-Path $sysmainPerfKey)) {
+            New-Item -Path $sysmainPerfKey -Force
+        }
+
+        # Set correct values
+        Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
+        Set-ItemProperty -Path $sysmainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
+        Set-ItemProperty -Path $sysmainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
+        Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
+
+        Write-Host "SysMain Performance key has been created/reset."
+    }
+    
+    <# -------------------------------------------------------- LSM perf counters/registration 
+
+    #dll "C:\Windows\System32\perfts.dll"
+    # Reset LSM Performance registry values
+    $lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
+
+    # Ensure key exists
+    if (-not (Test-Path $lsmPerfKey)) {
+        New-Item -Path $lsmPerfKey -Force
+    }
+
+    # Set correct values
+    Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+    Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+    Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+    Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+
+    # Remove invalid entries
+
+
+    Write-Host "Registry values for LSM Performance key have been reset."
+
+    # Rebuild counters
+    Write-Host "Rebuilding performance counters..."
+    lodctr /T:LSM
+    lodctr /e:LSM
+
+    Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
+
+    # -------------------------------------------------------- BITS perf counters/registration 
+
+    $bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
+    if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
+    Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
+    Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
+    Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
+    Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
+    Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+
+    # -------------------------------------------------------- WMI perf counters and registration 
+
+    $wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
+
+    # Ensure key exists
+    if (-not (Test-Path $wmiPerfKey)) {
+        New-Item -Path $wmiPerfKey -Force
+    }
+
+    # Remove invalid entries
+    (Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
+        Where-Object { $_.Name -notin $keepProps } |
+        ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+
+    # Set correct values
+    Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
+    Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
+    Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
+    Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+
+    Write-Host "WmiApRpl Performance key has been reset."
+    lodctr /T:WmiApRpl
+    lodctr /e:WmiApRpl
+    # -------------------------------------------------------- TermService perf counters and registration
+
+    # dll = "C:\Windows\System32\perfts.dll"
+    $termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
+    if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
+    Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+    Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+    Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+    Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+    Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+
+    lodctr /T:TermService
+    lodctr /e:TermService
+    # ------------------------------------------------------------------------
+
+    finally do this:
+    lodctr /R 
+    sfc /scannow #>
+ }
+
+
+
+# -------------------------------------------------------- Main Functions --------------------------------------------------------
+
 Function Recreate-WmiApSrv 
 	{
 		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
@@ -421,12 +470,9 @@ Function Update-Winmgmt
                 [int]$Stop = 0,
                 [int]$Start = 0,
                 [int]$Force = 0
-                
-                #################### Implement function parameters: 
-                ########################################  checksvc, ConfigSvc(enabled/disabled), Stop, Start
             )
         
-        # Parameter handling
+        #################### Parameter handling
         If ($PSBoundParameters.ContainsKey('Enabled')) 
             {
                 If ($Enabled -eq 1) 
@@ -542,99 +588,108 @@ Function Rebuild-WMIRepo
                 [string]$RepairType
             )
 
-
-        If ($RepairType -eq "Standard")
+        If ($PSBoundParameters.ContainsKey('RepairType'))
             {
-                $SvcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
+                If ($RepairType -eq "Standard")
+                    {
+                        $SvcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
 		
-                Resolve-WmiApSrv
-		        cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
+                        Resolve-WmiApSrv
+		                cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
 		
-                # Attempt to stop the WMI service
-                $result = Update-Winmgmt -Stop
+                        # Attempt to stop the WMI service
+                        $result = Update-Winmgmt -Stop
 		        
-                If ($result.Status -eq 'Failed') 
-			        {
-				        Write-Host "Windows Management Instrumentation Services could not be stopped."
-                        Write-Output "Windows Management Instrumentation Services could not be stopped normally.`n`tAttempting forceful service restart" | Write-Log -Type Debug
+                        If ($result.Status -eq 'Failed') 
+			                {
+				                Write-Host "Windows Management Instrumentation Services could not be stopped."
+                                Write-Output "Windows Management Instrumentation Services could not be stopped normally.`n`tAttempting forceful service restart" | Write-Log -Type Debug
                 
-				        # Attempt to forcefully restart the service
-				        Try 
-					        {
-						        Update-Winmgmt -Force
-						        Write-Host "WMI Service forcefully Stopped."
-                                Write-Log -Message "WMI Services forcefully restarted" -Type Info
-					        } 
-				        Catch 
-					        {
-						        Write-Host "Windows Management Instrumentation Service (winmgmt) could not be forcefully stopped.."
-                                Write-Failure -ErrorMessage $SvcError
-					        }
-			        } 
-		        ElseIf ($result.Status -eq 'Success') 
-			        {
-				        Write-Host "Windows Management Instrumentation stopped successfully.`nRestarting service.."
-				        Update-Winmgmt -Start
-			        } 
-		        Else 
-			        {
-				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
-                        Write-Log -Type Debug
-			        }
+				                # Attempt to forcefully restart the service
+				                Try 
+					                {
+						                Update-Winmgmt -Force
+						                Write-Host "WMI Service forcefully Stopped."
+                                        Write-Log -Message "WMI Services forcefully restarted" -Type Info
+					                } 
+				                Catch 
+					                {
+						                Write-Host "Windows Management Instrumentation Service (winmgmt) could not be forcefully stopped.."
+                                        Write-Failure -ErrorMessage $SvcError
+					                }
+			                } 
+		                ElseIf ($result.Status -eq 'Success') 
+			                {
+				                Write-Host "Windows Management Instrumentation stopped successfully.`nRestarting service.."
+				                Update-Winmgmt -Start
+			                } 
+		                Else 
+			                {
+				                Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
+                                Write-Log -Type Debug
+			                }
 			
-		        Resolve-WmiApSrv
-		        cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
-		        cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
-		        cmd /c "for %i in (*.exe) do %i /regserver"
-		        cmd /c "regsvr32 C:\Windows\System32\wbem\wmisvc.dll /s"
-		        cmd /c "wmiprvse /regserver"
-            }
+		                Resolve-WmiApSrv
+		                cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
+		                cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
+		                cmd /c "for %i in (*.exe) do %i /regserver"
+		                cmd /c "regsvr32 C:\Windows\System32\wbem\wmisvc.dll /s"
+		                cmd /c "wmiprvse /regserver"
+                    }
 
-        If ($RepairType -eq "Complete")
-            {
-		        Resolve-WmiApSrv
-		        cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
-		        Update-Winmgmt -Enabled 0 # -> Update-Winmgmt -Enabled 0
-		        # Attempt to stop the WMI service
-		        $SvcChk = Update-Winmgmt -Stop
-		        If ($SvcChk.Status -eq "Failed") 
-			        {
-				        Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
-                        Start-Sleep -Seconds 2
-				        # Attempt to forcefully stop the service
-				        Try 
-					        {
-						        Update-Winmgmt -Force
-						        Write-Host "Service forcefully restarted."
-                                # Write-Log -Message "WMI Services forcefully restarted" | probably going to handle this in the origin module itself
+                If ($RepairType -eq "Complete")
+                    {
+		                Resolve-WmiApSrv
+		                cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
+		                Update-Winmgmt -Enabled 0 # -> Update-Winmgmt -Enabled 0
+		                # Attempt to stop the WMI service
+		                $SvcChk = Update-Winmgmt -Stop
+		                If ($SvcChk.Status -eq "Failed") 
+			                {
+				                Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
                                 Start-Sleep -Seconds 2
-					        } 
+				                # Attempt to forcefully stop the service
+				                Try 
+					                {
+						                Update-Winmgmt -Force
+						                Write-Host "Service forcefully restarted."
+                                        # Write-Log -Message "WMI Services forcefully restarted" | probably going to handle this in the origin module itself
+                                        Start-Sleep -Seconds 2
+					                } 
 				        
-                        Catch 
-					        {
-						        Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
-                                Write-Failure -ErrorMessage "Windows Management Instrumentation services couldn't be stopped."
-						        exit 1
-					        }
-			        } 
-		        ElseIf ($SvcChk.Status -eq "Success") 
-			        {
-				        Write-Host "Windows Management Instrumentation stopped successfully."
-			        } 
-		        Else 
-			        {
-				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
-                        Write-Log -Type Debug
-			        }
-		        Rename-Item -Path "C:\Windows\System32\Wbem\Repository" -NewName "Repository.old" -Force
-		        Resolve-WmiApSrv
-		        cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
-		        cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
-		        cmd /c "for %i in (*.exe) do %i /regserver"
-		        cmd /c "regsvr32 wmisvc.dll /s"
-		        cmd /c "wmiprvse /regserver"
+                                Catch 
+					                {
+						                Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
+                                        Write-Failure -ErrorMessage "Windows Management Instrumentation services couldn't be stopped."
+						                exit 1
+					                }
+			                } 
+		                ElseIf ($SvcChk.Status -eq "Success") 
+			                {
+				                Write-Host "Windows Management Instrumentation stopped successfully."
+			                } 
+		                Else 
+			                {
+				                Write-Output "Unexpected result while stopping the service. Manual intervention may be required." | Write-Log -Type Debug
+			                }
+		        
+                        Rename-Item -Path "C:\Windows\System32\Wbem\Repository" -NewName "Repository.old" -Force
+		                Resolve-WmiApSrv
+		                cmd /c "for /f %s in ('dir /s /b *.mof *.mfl') do mofcomp %s"
+		                cmd /c "for /f %s in ('dir /b /s *.dll') do regsvr32 /s %s"
+		                cmd /c "for %i in (*.exe) do %i /regserver"
+		                cmd /c "regsvr32 wmisvc.dll /s"
+		                cmd /c "wmiprvse /regserver"
+                    }
             }
-	}
+        Else
+            {
+                Return [PSCustomObject]@{
+                    Status      = 'Failed'
+                    Message     = 'Invalid function use!'
+                }
+            }
+    }
 
 
 Function Resync-Counters 
@@ -651,123 +706,131 @@ Function Resync-Counters
 		$MaxAttempts = 3
 		$ErrorPattern = "Error: Unable to rebuild performance counter setting"
 		$SuccessPattern = "Info: Successfully rebuilt performance counter setting"
-		
-        if ($SyncType -eq "Standard")
+		If ($PSBoundParameters.ContainsKey('SyncType'))
             {
-		        do {
-			        $Attempt++
-			        Try {
-					        "C:\Windows\system32", "C:\Windows\SysWOW64" |
-					        ForEach-Object 
-						        {
-							        & cmd /c "cd $_ && lodctr /R" 2>&1 |
-							        ForEach-Object 
-								        { 
-									        If ($_ -match $ErrorPattern)
-										        { 
-											        Throw $_ 
-										        } 
-									        ElseIf ($_ -match $SuccessPattern)
-										        {
-											        Write-Output "Rebuild Successful"
-										        } 
-								        } 
-						        }
-					        #sync counters If lodctr succeed
-					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
-					        Write-Host "Resync Successful!"
-					        Return $True
-				        }
+                if ($SyncType -eq "Standard")
+                    {
+		                do {
+			                $Attempt++
+			                Try {
+					                "C:\Windows\system32", "C:\Windows\SysWOW64" |
+					                ForEach-Object 
+						                {
+							                & cmd /c "cd $_ && lodctr /R" 2>&1 |
+							                ForEach-Object 
+								                { 
+									                If ($_ -match $ErrorPattern)
+										                { 
+											                Throw $_ 
+										                } 
+									                ElseIf ($_ -match $SuccessPattern)
+										                {
+											                Write-Output "Rebuild Successful"
+										                } 
+								                } 
+						                }
+					                #sync counters If lodctr succeed
+					                & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
+					                Write-Host "Resync Successful!"
+					                Return $True
+				                }
 			        
-                    Catch 
-				        {
-					        If ($_.Exception.Message -match $ErrorPattern) 
-						        {
-							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
-                                    #Write-Log $_.Exception.Message + attempt number
+                            Catch 
+				                {
+					                If ($_.Exception.Message -match $ErrorPattern) 
+						                {
+							                Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
+                                            #Write-Log $_.Exception.Message + attempt number
                                     
-							        If ($Attempt -lt $MaxAttempts)
-								        {
-									        Start-Sleep -Seconds 2
-								        }
-							        Else
-								        {
-									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts. Rebooting computer!"
-                                            Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Warning
-									        Write-Failure -ErrorMessage $_.Exception.Message
-									        Return $False
-								        }
-						        }
-					        Else 
-						        {
-							        Write-Log $_.Exception.Message
-							        Return $False
-						        }
-				        }
-			        } while ($Attempt -lt $MaxAttempts)
+							                If ($Attempt -lt $MaxAttempts)
+								                {
+									                Start-Sleep -Seconds 2
+								                }
+							                Else
+								                {
+									                Write-Output "Failed to rebuild performance counters after $MaxAttempts attempts!" | Write-Log -Type Warning
+									                Write-Failure -ErrorMessage $_.Exception.Message
+									                Return $False
+								                }
+						                }
+					                Else 
+						                {
+							                Write-Log $_.Exception.Message
+							                Return $False
+						                }
+				                }
+			                } while ($Attempt -lt $MaxAttempts)
 
-		        # Set WMI Services back to normal and start them
-                Update-Winmgmt -Enabled 1
-            }
-############################################################
-		if ($SyncType -eq "Complete")
-            {
-                Write-Host "`nAttempting to rebuild performance counters"
-		
-		        #Initializing error handling
-		
-		        do {
-			        $Attempt++
-			        Try {
-					        "C:\Windows\system32", "C:\Windows\SysWOW64" |
-					        ForEach-Object 
-						        {
-							        & cmd /c "cd $_ && lodctr /R" 2>&1 |
-							        ForEach-Object 
-								        { 
-									        If ($_ -match $ErrorPattern)
-										        { 
-											        Throw $_ 
-										        } 
-									        ElseIf ($_ -match $SuccessPattern)
-										        {
-											        Write-Output "Rebuild Successful" | Write-Log 
+		                # Set WMI Services back to normal and start them
+                        Update-Winmgmt -Enabled 1
+                    }
 
-										        } 
-								        }
-						        }
-					        #sync counters If lodctr succeed
-					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
-					        Write-Host "Resync Successful!"
-                            Write-Log -Message "Successfully re-synced performance counters" -Type Info
-				        }
-			        Catch 
-				        {
-					        If ($_.Exception.Message -match $ErrorPattern)
-						        {
-							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)"
-							        If ($Attempt -lt $MaxAttempts)
-								        {
-									        Start-Sleep -Seconds 2
-								        }
-							        Else
-								        {
-									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts."
-                                            Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
-									        Write-Failure $_.Exception.Message
-								        }
+		        if ($SyncType -eq "Complete")
+                    {
+                        Write-Host "`nAttempting to rebuild performance counters"
+		
+		                #Initializing error handling
+		
+		                do {
+			                $Attempt++
+			                Try {
+					                "C:\Windows\system32", "C:\Windows\SysWOW64" |
+					                ForEach-Object 
+						                {
+							                & cmd /c "cd $_ && lodctr /R" 2>&1 |
+							                ForEach-Object 
+								                { 
+									                If ($_ -match $ErrorPattern)
+										                { 
+											                Throw $_ 
+										                } 
+									                ElseIf ($_ -match $SuccessPattern)
+										                {
+											                Write-Output "Rebuild Successful" | Write-Log 
+
+										                } 
+								                }
+						                }
+					                #sync counters If lodctr succeed
+					                & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
+					                Write-Host "Resync Successful!"
+                                    Write-Log -Message "Successfully re-synced performance counters" -Type Info
+				                }
+			                Catch 
+				                {
+					                If ($_.Exception.Message -match $ErrorPattern)
+						                {
+							                Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)"
+							                If ($Attempt -lt $MaxAttempts)
+								                {
+									                Start-Sleep -Seconds 2
+								                }
+							                Else
+								                {
+									                Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts."
+                                                    Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
+									                Write-Failure $_.Exception.Message
+								                }
 							
-						        }
-					        Else 
-						        {
-							        Write-Host "Unexpected error has occurred."
-                                    Write-Failure $_.Exception.Message
-						        }
-				        }
-			        } while ($Attempt -lt $MaxAttempts)
+						                }
+					                Else 
+						                {
+							                Write-Host "Unexpected error has occurred."
+                                            Write-Failure $_.Exception.Message
+						                }
+				                }
+			                } while ($Attempt -lt $MaxAttempts)
 		
-		        # Set WMI Services back to normal and start them
-                Update-Winmgmt -Enabled 1
+		                # Set WMI Services back to normal and start them
+                        Update-Winmgmt -Enabled 1
+                    }
+                }
+        Else
+            {
+                Return [PSCustomObject]@{
+                    Status     = 'Failed'
+                    Message    = 'Invalid function input'    
+                }
             }
 	}
 	
@@ -838,8 +901,8 @@ Function Main
 			        }
 				
 	        }
-
-        If (Verify-PerfLib) 
+        ######## Refactor to new function that reads event content. Keep Verify-Perflib for boolean evaluation and use new for in-depth diagnostic
+        If (Verify-PerfLib) #basically a true or false check
 	        {
                 # new function being written: 
 		        Write-Output "PerfLib errors found.`nRepairing Associated dll's." | Write-Log -Type Warning
