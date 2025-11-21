@@ -1,5 +1,5 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: Thursday, November 20, 2025 10:16:07 PM
+# Last Updated: Friday, November 21, 2025 3:04:20 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
 # -------------------------------------------------------- To Do/Implement --------------------------------------------------------
@@ -303,12 +303,14 @@ Function Test-PerfCounters
                 [string]$ParseEvents
             )
 
-        If ($PSBoundParameters.ContainsKey('DllPath'))
+        If ($PSBoundParameters.ContainsKey('TestDll'))
             {
                 # Insert Logic
                 # can PSCustom object not need.
 
             }
+
+        If ($
         <#sfc /verifyfile="$DllPath" /OFFLOGFILE=(Log-File)
         
         Test existence:
@@ -345,7 +347,7 @@ Function Repair-PerfCounters
 
     If ($PSBoundParameters.ContainsKey('Perflib'))
     {
-        # Sysmain dll perfcounters/registration
+        <# Sysmain dll perfcounters/registration
 
         $sysmainPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
 
@@ -361,88 +363,90 @@ Function Repair-PerfCounters
         Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
 
         Write-Host "SysMain Performance key has been created/reset."
-    }
     
-    <# -------------------------------------------------------- LSM perf counters/registration 
+    
+        # -------------------------------------------------------- LSM perf counters/registration 
 
-    #dll "C:\Windows\System32\perfts.dll"
-    # Reset LSM Performance registry values
-    $lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
+        #dll "C:\Windows\System32\perfts.dll"
+        # Reset LSM Performance registry values
+        $lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
 
-    # Ensure key exists
-    if (-not (Test-Path $lsmPerfKey)) {
-        New-Item -Path $lsmPerfKey -Force
+        # Ensure key exists
+        if (-not (Test-Path $lsmPerfKey)) {
+            New-Item -Path $lsmPerfKey -Force
+        }
+
+        # Set correct values
+        Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+        Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+        Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+        Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+
+        # Remove invalid entries
+
+
+        Write-Host "Registry values for LSM Performance key have been reset."
+
+        # Rebuild counters
+        Write-Host "Rebuilding performance counters..."
+        lodctr /T:LSM
+        lodctr /e:LSM
+
+        Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
+
+        # -------------------------------------------------------- BITS perf counters/registration 
+
+        $bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
+        if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
+        Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
+        Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
+        Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
+        Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
+        Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+
+        # -------------------------------------------------------- WMI perf counters and registration 
+
+        $wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
+
+        # Ensure key exists
+        if (-not (Test-Path $wmiPerfKey)) {
+            New-Item -Path $wmiPerfKey -Force
+        }
+
+        # Remove invalid entries
+        (Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
+            Where-Object { $_.Name -notin $keepProps } |
+            ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+
+        # Set correct values
+        Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
+        Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
+        Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
+        Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+
+        Write-Host "WmiApRpl Performance key has been reset."
+        lodctr /T:WmiApRpl
+        lodctr /e:WmiApRpl
+        # -------------------------------------------------------- TermService perf counters and registration
+
+        # dll = "C:\Windows\System32\perfts.dll"
+        $termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
+        if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
+        Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+        Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+        Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+        Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+        Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+
+        lodctr /T:TermService
+        lodctr /e:TermService
+        # ------------------------------------------------------------------------
+
+        finally do this:
+        lodctr /R 
+        sfc /scannow 
+        #>
     }
-
-    # Set correct values
-    Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-    Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-    Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-    Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
-
-    # Remove invalid entries
-
-
-    Write-Host "Registry values for LSM Performance key have been reset."
-
-    # Rebuild counters
-    Write-Host "Rebuilding performance counters..."
-    lodctr /T:LSM
-    lodctr /e:LSM
-
-    Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
-
-    # -------------------------------------------------------- BITS perf counters/registration 
-
-    $bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
-    if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
-    Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
-    Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
-    Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
-    Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
-    Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-
-    # -------------------------------------------------------- WMI perf counters and registration 
-
-    $wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
-
-    # Ensure key exists
-    if (-not (Test-Path $wmiPerfKey)) {
-        New-Item -Path $wmiPerfKey -Force
-    }
-
-    # Remove invalid entries
-    (Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
-        Where-Object { $_.Name -notin $keepProps } |
-        ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
-
-    # Set correct values
-    Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
-    Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
-    Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
-    Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
-
-    Write-Host "WmiApRpl Performance key has been reset."
-    lodctr /T:WmiApRpl
-    lodctr /e:WmiApRpl
-    # -------------------------------------------------------- TermService perf counters and registration
-
-    # dll = "C:\Windows\System32\perfts.dll"
-    $termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
-    if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
-    Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-    Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-    Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-    Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
-    Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-
-    lodctr /T:TermService
-    lodctr /e:TermService
-    # ------------------------------------------------------------------------
-
-    finally do this:
-    lodctr /R 
-    sfc /scannow #>
  }
 
 
