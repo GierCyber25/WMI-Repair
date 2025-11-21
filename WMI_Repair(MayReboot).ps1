@@ -1,9 +1,9 @@
 ﻿# Author: Carter Gierhart
-# Last Updated: Thursday, November 20, 2025 3:15:59 PM
+# Last Updated: Thursday, November 20, 2025 10:16:07 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
 # --------------------------------------------------------To Do/Implement--------------------------------------------------------
-# --------------------------------------------------------testing for each perfcounter--------------------------------------------------------
+# --------------------------------------------------------Testing for each perfcounter--------------------------------------------------------
 
 <# sfc /verifyfile=C:\Windows\System32\%dllname%.dll
 Test existence:
@@ -35,7 +35,7 @@ if (-not (Test-Path $sysmainPerfKey)) {
 }
 
 # Set correct values
-Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "sysmain.dll"
+Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
 Set-ItemProperty -Path $sysmainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
 Set-ItemProperty -Path $sysmainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
 Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
@@ -74,10 +74,11 @@ Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
 
 $bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
 if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
-Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "bitsperf.dll"
+Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
 Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
 Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
 Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
+Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
 
 # --------------------------------------------------------WMI perf counters and registration--------------------------------------------------------
 
@@ -88,19 +89,17 @@ if (-not (Test-Path $wmiPerfKey)) {
     New-Item -Path $wmiPerfKey -Force
 }
 
+# Remove invalid entries
+$keepProps = @("Library","Open","Collect","Close")
+(Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
+    Where-Object { $_.Name -notin $keepProps } |
+    ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+
 # Set correct values
-Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "wbem\WmiApRpl.dll"
+Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
 Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
 Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
 Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
-
-# Remove invalid entries
-Remove-ItemProperty -Path $wmiPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $wmiPerfKey -Name "1008" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $wmiPerfKey -Name "First Counter" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $wmiPerfKey -Name "First Help" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $wmiPerfKey -Name "Last Counter" -ErrorAction SilentlyContinue
-Remove-ItemProperty -Path $wmiPerfKey -Name "Last Help" -ErrorAction SilentlyContinue
 
 Write-Host "WmiApRpl Performance key has been reset."
 -------------------------------------------------------------------
@@ -123,6 +122,8 @@ sfc /scannow #>
 
 ##################### logging is still a work in progress
 
+
+##################### Initial detection and setup for logging.
 Function Date-Stamp {
     Get-Date -Format "MM/dd/yyyy"
 }
@@ -131,101 +132,53 @@ Function Get-Time {
     Get-Date -Format "HH:mm:ss"
 }
 
-##################### Initial detection and setup for logging.
-<#
 Function Log-File
     {
         #################### Note: when using this function for logpath you must write it as (Log-File) i.e. <command> | Write-Log -LogPath (Log-File)
         #################### Variable initialization
-        $GetUser = Get-ChildItem env:\userprofile | Select-Object -ExpandProperty Value
-        $UsrPath_OneDrive = $GetUser + "\OneDrive\Desktop\"
-        $UsrPath = $GetUser + "\Desktop\"
+        $GetUser = (Get-ChildItem env:\userprofile).Value
+        $UserPath_OneDrive = Join-Path $GetUser "OneDrive\Desktop"
+        $UserPath = Join-path $GetUser "Desktop"
+        $FallBack = "C:\WMI Repair Logs"
+        $LogFile = "WMI_Repair_Log[$(Date-Stamp)].txt"
+        $Header = "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
 
-        $PathError = "Error: User path could not be found!"
-        $LogFile = "WMI_Repair_Log.txt"
-        
-        #################### Test user desktop path with error handling
-
-        Try
+        # Determine logging directory
+        If (Test-Path -Path $UserPath_OneDrive)
             {
-                If (Test-Path -Path $UsrPath_OneDrive)
-                    {
-                        Write-Host "OneDrive detected`nSetting up logfile accordingly.."
-                        $UsrPth = $UsrPath_OneDrive                    
-                    }
+                Write-Host "OneDrive detected`nSetting up logfile accordingly.."
+                $LogDir = Join-Path $UserPath_OneDrive "WMI Repair Logs"
+            }
                 
-                ElseIf (Test-Path -Path $UsrPath)
-                    {
-                        Write-Host "Normal user path detected!`nSetting up logfile.."
-                        $UsrPth = $UsrPath
-                    }
+        ElseIf (Test-Path -Path $UserPath)
+            {
+                Write-Host "Normal user path detected!`nSetting up logfile accordingly.."
+                $LogDir = Join-Path $UserPath "WMI Repair Logs"
+            }
                 
-                Else
-                    {
-                        Throw $PathError
-                    }
-            }
-        Catch
+        Else
             {
-                If ($_ -match $PathError)
+                $LogDir = $FallBack
+                If (-not (Test-Path $LogDir))
                     {
-                        $UsrPth = $False
+                        New-Item -Path $LogDir -ItemType Directory | Out-Null
                     }
+                Write-Host "Using fallback path: $LogDir"
             }
-        
-        #################### Testing for log existence under user desktop
-        #################### TODO: add handling for pre-existing logs so that the date-stamp is not added everytime the program is ran within the same day
-        If ($UsrPth -ne $False)
+
+        $LogPath = Join-Path $LogDir $LogFile
+
+        # Create or Update log file
+        If (-not (Test-Path $LogPath))
             {
-                $UsrLogPath = $UsrPth+$LogFile
-                $TestUserPath = Test-Path -Path $UsrLogPath
-
-                If ($TestUserPath -eq $True)
-                    {
-                        Write-Host "Log file detected"
-                        Write-Log -LogPath $UsrLogPath -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
-                        Return $UsrLogPath
-                    }
-
-                If ($TestUserPath -eq $False)
-                    {
-                        #################### Create log file If it does not exist
-                        New-Item -Path $UsrPth -Name $LogFile -ItemType "File" -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------" 
-                        Return $UsrLogPath
-                    }
-            }
-
-        #################### Test for log existence If user path not findable
-        #################### TODO: add the same handling mentioned above but for non-standard log location
-        If ($UsrPth -eq $False)
+                New-Item -Path $LogPath -ItemType File -Value "$Header`n" | Out-Null
+            } 
+        Else
             {
-                $LogFolder = "C:\WMI Repair Logs"
-                $LogFilePath = $LogFolder + $LogFile
-                $TestFolderPath = Test-Path -Path $LogFolder
-                $TestFilePath = Test-Path -Path $LogFilePath
-
-                If ($TestFolderPath -eq $True)
-                    {
-                        If ($TestFilePath -eq $True)
-                            {
-                                Write-Host "Pre-existing log found in alternative location!"
-                                Write-Log -LogPath $LogFilePath -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
-                                Return $LogFilePath
-
-                            }
-                    }
-                
-                ElseIf ($TestFolderPath -eq $False)
-                    {
-                        Write-Host "Pre-existing log file not found"
-                        New-Item -Path $LogFolder -ItemType "Directory"
-                        New-Item -path $LogFolder -Name $LogFile -ItemType "File" -Value "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
-
-                        Return $LogFilePath
-                    }
+                Add-Content -Path $LogPath -Value "`n$Header"
             }
-         
-        
+        Return $LogPath
+
     }
 
 
@@ -235,16 +188,15 @@ Function Write-Failure
         param 
             ( 
                 [Parameter(ValueFromPipeline = $True)]$ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
-                [string]$LogPath
+                [string]$LogPath = (Log-File)
             )
         
         Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Add-Content -Path $LogPath -Value "[$(Get-Time)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
-        Start-Sleep -Seconds 30
+        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
 
         #################### send windows notif sound to computer speakers before reboot
         for ($i = 0; $i -le 1; $i++){"`a"}
-        Restart-Computer -Force
+        Request-Reboot
         exit 1
     }
 
@@ -260,7 +212,7 @@ Function Write-Log
 
                 [ValidateSet("Info", "Debug", "Warning")]
                 [string]$Type = "Info", #################### Debug, Info (default), Warning 
-                [string]$LogPath
+                [string]$LogPath = (Log-File)
             )
         
         If ($Type -eq "Debug")
@@ -269,7 +221,7 @@ Function Write-Log
                 process
                     {
                         $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
-                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
+                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
                     }
             }
         Else
@@ -277,14 +229,88 @@ Function Write-Log
                 process
                     {
                         $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
-                        Add-Content -Path $LogPath -Value "[$(Get-Time)] $Type : $LogMessage"
+                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : $LogMessage"
                     }
             }
     }
-#>
 
-# --------------------------------------------------------Main Functions--------------------------------------------------------
+# --------------------------------------------------------Supporting Functions--------------------------------------------------------
 
+Function Request-Reboot 
+    {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        Add-Type -AssemblyName Microsoft.VisualBasic
+
+        # Create the form
+        $form = New-Object System.Windows.Forms.Form
+        $form.Text = "Unrecoverable Script Failure"
+        $form.Size = New-Object System.Drawing.Size(400,200)
+        $form.StartPosition = "CenterScreen"
+        $form.FormBorderStyle = 'FixedDialog'
+        $form.MaximizeBox = $false
+        $form.MinimizeBox = $false
+
+        # Label
+        $label = New-Object System.Windows.Forms.Label
+        $label.Text = "Critical Error! A reboot is required."
+        $label.AutoSize = $true
+        $label.Location = New-Object System.Drawing.Point(30,20)
+        $form.Controls.Add($label)
+
+        # Restart Immediately button
+        $btnRestartNow = New-Object System.Windows.Forms.Button
+        $btnRestartNow.Text = "Restart Immediately"
+        $btnRestartNow.Size = New-Object System.Drawing.Size(150,30)
+        $btnRestartNow.Location = New-Object System.Drawing.Point(30,80)
+        $btnRestartNow.Add_Click({
+            [System.Windows.Forms.MessageBox]::Show("Restarting now...","Restart","OK","Information")
+            Restart-Computer -Force
+        })
+        $form.Controls.Add($btnRestartNow)
+
+        # Restart Later button
+        $btnRestartLater = New-Object System.Windows.Forms.Button
+        $btnRestartLater.Text = "Restart Later"
+        $btnRestartLater.Size = New-Object System.Drawing.Size(150,30)
+        $btnRestartLater.Location = New-Object System.Drawing.Point(200,80)
+        $btnRestartLater.Add_Click({
+            $form.Close()
+            While ($true) 
+                {
+                    Write-Host "You have 30 seconds to enter delay in minutes (default = 5)..."
+                    $job = Start-Job { Read-Host "Enter delay in minutes" }
+                    Wait-Job $job -Timeout 30 | Out-Null
+                    $delay = Receive-Job $job
+                    Remove-Job $job
+
+                    if (-not $delay) 
+                        {
+                            $delay = 5
+                            Write-Host "No input detected. Defaulting to 5 minutes."
+                        }
+
+                    if ($delay -match '^\d+$') 
+                        {
+                            $seconds = [int]$delay * 60
+                            [System.Windows.Forms.MessageBox]::Show("Reboot scheduled in $delay minute(s).","Confirmation","OK","Information")
+                            Write-Host "System will restart in $delay minute(s)..."
+                            Start-Sleep -Seconds $seconds
+                            Restart-Computer -Force
+                            break
+                        } 
+                    else 
+                        {
+                            Write-Host "Invalid input. Please enter a numeric value."
+                        }
+                }
+        })
+        $form.Controls.Add($btnRestartLater)
+
+        # Show the form
+        $form.Topmost = $true
+        $form.ShowDialog()
+    }
 
 Function Test-WMIRepo {
 		Return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
@@ -292,30 +318,10 @@ Function Test-WMIRepo {
 
 
 Function Get-BitLocker {
-		Return (Manage-Bde -Status c:) -match "invalid namespace"
+		Return (Manage-Bde -Status C:) -match "invalid namespace"
 	}
 
-Function Edit-Winmgmt
-    {
-        
-        [CmdletBinding()]
-
-        param
-            (
-                
-                #################### Implement function parameters: 
-                ########################################  checksvc, ConfigSvc(enabled/disabled), Stop, Start
-            )
-        cmd /c "net stop winmgmt /y" TODO: implement full reset and standard reset
-     
-        #################### Insert standard logic here "if (standard)" return (cmd /c "net stop winmgmt /y") -
-        sc.exe config "winmgmt" start= "auto"
-        sc.exe config "wmiApSrv" start= "auto"
-        cmd /c "net start winmgmt"
-        cmd /c "net start wmiApSrv"
-        #################### Insert complete logic here "if (complete) etc"
-    
-    }
+# --------------------------------------------------------Main Functions--------------------------------------------------------
 
 Function Verify-WMIEvents 
 	{
@@ -390,8 +396,142 @@ Function Resolve-WmiApSrv
 				1 {Recreate-WmiApSrv}
 				2 {Recreate-WmiApSrv}
 				3 {Write-Output "WmiApSrv service exists!`nMoving On!"}
+                default {Write-Log -Type Debug}
 			}
 	}
+
+Function Recreate-WmiApSrv 
+	{
+		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
+		Copy-Item -Path "C:\Windows\WinSxS\**\wmiapsrv.exe" -Destination "C:\Windows\System32\wbem\wmiapsrv.exe"
+		sc.exe create WmiApSrv binPath= "C:\Windows\System32\wbem\wmiapsrv.exe" DisplayName= "WMI Performance Adapter" type= "own" start= "demand" error= "normal" obj= "LocalSystem"
+		sc.exe start WmiApSrv
+	}
+
+
+Function Update-Winmgmt
+    {
+        
+        [CmdletBinding()]
+
+        param
+            (
+                [ValidateSet(0,1)]
+                [int]$Enabled, # 0 or 1
+                [int]$Stop = 0,
+                [int]$Start = 0,
+                [int]$Force = 0
+                
+                #################### Implement function parameters: 
+                ########################################  checksvc, ConfigSvc(enabled/disabled), Stop, Start
+            )
+        
+        # Parameter handling
+        If ($PSBoundParameters.ContainsKey('Enabled')) 
+            {
+                If ($Enabled -eq 1) 
+                    {
+                        Write-Host "Enabling and starting Winmgmt service..."
+                        sc.exe config "winmgmt" start= "auto"
+                        sc.exe config "wmiapsrv" start= "auto"
+                        cmd /c "net start winmgmt"
+                        cmd /c "net start wmiapsrv"
+                    }
+                ElseIf ($Enabled -eq 0) 
+                    {
+                        Write-Host "Disabling and stopping Winmgmt service..."
+                        sc.exe config "winmgmt" start= disabled
+                        cmd /c "net stop winmgmt /y"
+                    }
+            }
+        
+        If ($PSBoundParameters.ContainsKey('Start'))
+            {
+                $output = cmd /c "net start winmgmt /y"
+                If ($output -match "services was started successfully")
+                    {
+                        Return [PSCustomObject]@{Status = 'Success'; Message = 'Winmgmt service started successfully'}
+                    }
+                Else
+                    {
+                        Return [PSCustomObject]@{Status = 'Failed'; Message = 'Could not start winmgmt service'}
+                    }
+            }
+
+        If ($PSBoundParameters.ContainsKey('Stop'))
+            {
+                $output = cmd /c "net stop winmgmt /y"
+                If ($output -match "service was stopped successfully")
+                    {
+                        Return [PSCustomObject]@{Status = 'Success'; Message = 'Winmgmt service stopped successfully'}
+                    }
+                Else
+                    {
+                        Return [PSCustomObject]@{Status = 'Failed'; Message = 'Winmgmt service could not be stopped'}
+                    }
+            }
+
+
+        If ($PSBoundParameters.ContainsKey('Force')) 
+            {
+                Write-Host "Attempting forceful restart of Winmgmt service..."
+                $stopStatus = 'Failed'
+                $startStatus = 'Failed'
+                $fallbackUsed = $false
+
+                Try 
+                    {
+                        Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
+                        $stopStatus = 'Success'
+                        #add output to log
+                    } 
+            
+                Catch 
+                    {
+                        Write-Host "Stop-Service failed. Falling back to Restart-Service..."
+                        #add output to log
+                        $fallbackUsed = $true
+                        Try 
+                            {
+                                Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
+                                $stopStatus = 'Success'   # Treat fallback as success
+                                $startStatus = 'Success'
+                                #add output to log
+                            } 
+                
+                        Catch 
+                            {
+                                Write-Host "Restart-Service also failed."
+                                #add output to log
+                            }
+                    }
+
+                # If Stop succeeded, try Start
+                If ($stopStatus -eq 'Success' -and -not $fallbackUsed) 
+                    {
+                        Try 
+                            {
+                                Start-Service -Name "winmgmt" -ErrorAction Stop
+                                $startStatus = 'Success'
+                                #add output to log
+                            } 
+                    
+                        Catch 
+                            {
+                                Write-Host "Failed to start Winmgmt after stop."
+                                #add output to log
+                            }
+                    }
+
+                Return [PSCustomObject]@{
+                    Status       = if ($stopStatus -eq 'Success' -and $startStatus -eq 'Success') { 'Success' } else { 'Failed' }
+                    Stop         = $stopStatus
+                    Start        = $startStatus
+                    FallbackUsed = $fallbackUsed
+                    Message      = if ($fallbackUsed) { "Stop failed; Restart-Service used as fallback and succeeded." } else { "Force restart completed successfully." }
+                }
+            }
+    }
 
 
 Function Rebuild-WMIRepo
@@ -411,32 +551,35 @@ Function Rebuild-WMIRepo
 		        cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
 		
                 # Attempt to stop the WMI service
-		        $CheckSvc = cmd /c "net stop winmgmt /y"
-		        If ($CheckSvc -match "could not be stopped.") 
+                $result = Update-Winmgmt -Stop
+		        
+                If ($result.Status -eq 'Failed') 
 			        {
-				        Write-Host "Windows Management Instrumentation Services could not be stopped.`nAttempting to forcefully restart the service."
-                        Write-Output "Windows Management Instrumentation Services could not be stopped normally.`n`tAttempting forceful service restart" | Write-GeneralFailure -LogPath (Log-File)
+				        Write-Host "Windows Management Instrumentation Services could not be stopped."
+                        Write-Output "Windows Management Instrumentation Services could not be stopped normally.`n`tAttempting forceful service restart" | Write-Log -Type Debug
                 
 				        # Attempt to forcefully restart the service
 				        Try 
 					        {
-						        Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
+						        Update-Winmgmt -Force
 						        Write-Host "WMI Service forcefully Stopped."
+                                Write-Log -Message "WMI Services forcefully restarted" -Type Info
 					        } 
 				        Catch 
 					        {
 						        Write-Host "Windows Management Instrumentation Service (winmgmt) could not be forcefully stopped.."
-                                Write-Failure -ErrorMessage $SvcError -LogPath (Log-File)
+                                Write-Failure -ErrorMessage $SvcError
 					        }
 			        } 
-		        ElseIf ($CheckSvc -match "service was stopped successfully") 
+		        ElseIf ($result.Status -eq 'Success') 
 			        {
 				        Write-Host "Windows Management Instrumentation stopped successfully.`nRestarting service.."
-				        cmd /c "net start winmgmt"
+				        Update-Winmgmt -Start
 			        } 
 		        Else 
 			        {
 				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
+                        Write-Log -Type Debug
 			        }
 			
 		        Resolve-WmiApSrv
@@ -451,35 +594,37 @@ Function Rebuild-WMIRepo
             {
 		        Resolve-WmiApSrv
 		        cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
-		        sc.exe config "winmgmt" start= "disabled"
+		        Update-Winmgmt -Enabled 0 # -> Update-Winmgmt -Enabled 0
 		        # Attempt to stop the WMI service
-		        $CheckSvc = cmd /c "net stop winmgmt /y"
-		        If ($CheckSvc -match "could not be stopped.") 
+		        $SvcChk = Update-Winmgmt -Stop
+		        If ($SvcChk.Status -eq "Failed") 
 			        {
 				        Write-Host "Windows Management Instrumentation couldn't stop.`nAttempting to forcefully stop the service."
                         Start-Sleep -Seconds 2
 				        # Attempt to forcefully stop the service
 				        Try 
 					        {
-						        Stop-Service -Name "winmgmt" -Force -ErrorAction Stop
+						        Update-Winmgmt -Force
 						        Write-Host "Service forcefully restarted."
-                                Write-Log -LogPath (Log-File) -Message "WMI Services forcefully restarted"
+                                # Write-Log -Message "WMI Services forcefully restarted" | probably going to handle this in the origin module itself
                                 Start-Sleep -Seconds 2
 					        } 
-				        Catch 
+				        
+                        Catch 
 					        {
 						        Write-Host "Service stop could not be forced. Restarting Device in 30 seconds.."
-                                Write-HardFailure -ErrorMessage "Windows Management Instrumentation services couldn't be stopped." -LogPath (Log-File)
+                                Write-Failure -ErrorMessage "Windows Management Instrumentation services couldn't be stopped."
 						        exit 1
 					        }
 			        } 
-		        ElseIf ($CheckSvc -match "service was stopped successfully") 
+		        ElseIf ($SvcChk.Status -eq "Success") 
 			        {
-				        Write-Host "Windows Management Instrumentation stopped successfully.`Restarting Service."
+				        Write-Host "Windows Management Instrumentation stopped successfully."
 			        } 
 		        Else 
 			        {
 				        Write-Host "Unexpected result while stopping the service. Manual intervention may be required."
+                        Write-Log -Type Debug
 			        }
 		        Rename-Item -Path "C:\Windows\System32\Wbem\Repository" -NewName "Repository.old" -Force
 		        Resolve-WmiApSrv
@@ -489,15 +634,6 @@ Function Rebuild-WMIRepo
 		        cmd /c "regsvr32 wmisvc.dll /s"
 		        cmd /c "wmiprvse /regserver"
             }
-	}
-
-
-Function Recreate-WmiApSrv 
-	{
-		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
-		Copy-Item -Path "C:\Windows\WinSxS\**\wmiapsrv.exe" -Destination "C:\Windows\System32\wbem\wmiapsrv.exe"
-		sc.exe create WmiApSrv binPath= "C:\Windows\System32\wbem\wmiapsrv.exe" DisplayName= "WMI Performance Adapter" type= "own" start= "demand" error= "normal" obj= "LocalSystem"
-		sc.exe start WmiApSrv
 	}
 
 
@@ -542,11 +678,13 @@ Function Resync-Counters
 					        Write-Host "Resync Successful!"
 					        Return $True
 				        }
-			        Catch 
+			        
+                    Catch 
 				        {
 					        If ($_.Exception.Message -match $ErrorPattern) 
 						        {
 							        Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
+                                    #Write-Log $_.Exception.Message + attempt number
                                     
 							        If ($Attempt -lt $MaxAttempts)
 								        {
@@ -555,22 +693,21 @@ Function Resync-Counters
 							        Else
 								        {
 									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts. Rebooting computer!"
-                                            Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Debug -LogPath (Log-File)
-									        Write-Error $_.Exception.Message
+                                            Write-Output "Maximum Retries Reached! Could not rebuild counters after $Attempt attempts..." | Write-Log -Type Warning
+									        Write-Failure -ErrorMessage $_.Exception.Message
 									        Return $False
 								        }
 						        }
 					        Else 
 						        {
-							        Write-Error $_.Exception.Message
-							        Restart-Computer
+							        Write-Log $_.Exception.Message
 							        Return $False
 						        }
 				        }
 			        } while ($Attempt -lt $MaxAttempts)
 
 		        # Set WMI Services back to normal and start them
-                Set-WMIService
+                Update-Winmgmt -Enabled 1
             }
 ############################################################
 		if ($SyncType -eq "Complete")
@@ -594,7 +731,7 @@ Function Resync-Counters
 										        } 
 									        ElseIf ($_ -match $SuccessPattern)
 										        {
-											        Write-Output "Rebuild Successful"
+											        Write-Output "Rebuild Successful" | Write-Log 
 
 										        } 
 								        }
@@ -602,7 +739,7 @@ Function Resync-Counters
 					        #sync counters If lodctr succeed
 					        & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
 					        Write-Host "Resync Successful!"
-                            Write-Log -LogPath (Log-File) -Type Info -Message "Successfully re-synced performance counters"
+                            Write-Log -Message "Successfully re-synced performance counters" -Type Info
 				        }
 			        Catch 
 				        {
@@ -616,24 +753,21 @@ Function Resync-Counters
 							        Else
 								        {
 									        Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts."
-                                            Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Debug -LogPath (Log-File)
-									        Write-HardFailure $_.Exception.Message
+                                            Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
+									        Write-Failure $_.Exception.Message
 								        }
 							
 						        }
 					        Else 
 						        {
 							        Write-Host "Unexpected error has occurred."
-                                    Write-HardFailure $_.Exception.Message
+                                    Write-Failure $_.Exception.Message
 						        }
 				        }
 			        } while ($Attempt -lt $MaxAttempts)
 		
 		        # Set WMI Services back to normal and start them
-		        sc.exe config "winmgmt" start= "auto"
-		        sc.exe config "wmiApSrv" start= "auto"
-		        cmd /c "net start winmgmt"
-		        cmd /c "net start wmiApSrv"
+                Update-Winmgmt -Enabled 1
             }
 	}
 	
@@ -658,21 +792,21 @@ Function Main
 			        } 
 		        Else 
 			        {
-				        Write-Output "Repository passed initial verification.`nReviewing machine logs for relevant Events."
+				        Write-Output "Repository passed initial verification.`nReviewing machine logs for relevant Events." | Write-Log
 			        }
 			
 	        }
 
         ElseIf (Get-BitLocker) 
 	        {
-		        Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!"
+		        Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!" | Write-Log -Type Warning
 		        Rebuild-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
 		        Resync-Counters -SyncType Standard
 		
 		        If (Test-WMIRepo) 
 			        {
-				        Write-Output "Salvage failed!`nResetting Repository."
+				        Write-Output "Salvage failed!`nResetting Repository." | Write-Log -Type Warning
 				        Rebuild-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
 				        Resync-Counters -SyncType Complete
@@ -686,32 +820,37 @@ Function Main
 
         If (Verify-WMIEvents) 
 	        {
-		        Write-Output "WMI Error/Warning events have been detected in the last 30 days.`nRebuilding WMI repository.."
+		        Write-Output "WMI Error/Warning events have been detected in the last 30 days.`nRebuilding WMI repository.." | Write-Log -Debug
 		        Rebuild-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
 		        Resync-Counters -SyncType Standard
 		
 		        If (Test-WMIRepo) 
 			        {
-				        Write-Output "Salvage failed - performing reset"
+				        Write-Output "Salvage failed - performing reset" | Write-Log -Type Warning
 				        Rebuild-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
 				        Resync-Counters -SyncType Complete
 			        } 
 		        Else 
 			        {
-				        Write-Output "`nNo relevant WMI events found in the last 30 days."
+				        Write-Output "`nNo relevant WMI events found in the last 30 days." | Write-Log
 			        }
 				
 	        }
 
         If (Verify-PerfLib) 
 	        {
-		        Write-Output "PerfLib errors found.`nRe-Registering Associated dll's."
+                # new function being written: 
+		        Write-Output "PerfLib errors found.`nRepairing Associated dll's." | Write-Log -Type Warning
 		        cd C:\Windows\System32
-		        cmd /c "regsvr32 C:\Windows\System32\bitsperf.dll /s"
-		        cmd /c "regsvr32 C:\Windows\System32\sysmain.dll /s"
-                cmd /c "regsvr32 C:\Windows\System32\wbem\WmiApRpl.dll /s"
+
+                # These aren't com dll's so this straight up just doesn't work
+                # I've been known to be something of a dumbass on occasion 
+		        <# Adding repairs and checks for these:
+                C:\Windows\System32\bitsperf.dll
+		        C:\Windows\System32\sysmain.dll
+                C:\Windows\System32\wbem\WmiApRpl.dll#>
             } 
         Else 
 	        { 
