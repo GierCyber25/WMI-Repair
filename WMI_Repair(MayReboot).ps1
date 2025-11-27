@@ -107,7 +107,7 @@ Function Write-Log
                 Write-Host "General Script Error Detected"
                 process
                     {
-                        $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
+                        $LogMessage = If ($Message -is [string]) { $Message } Else { $Message | Out-String }
                         Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
                     }
             }
@@ -115,7 +115,7 @@ Function Write-Log
             {
                 process
                     {
-                        $LogMessage = if ($Message -is [string]) { $Message } else { $Message | Out-String }
+                        $LogMessage = If ($Message -is [string]) { $Message } Else { $Message | Out-String }
                         Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : $LogMessage"
                     }
             }
@@ -171,13 +171,13 @@ Function Request-Reboot
                     $delay = Receive-Job $job
                     Remove-Job $job
 
-                    if (-not $delay) 
+                    If (-not $delay) 
                         {
                             $delay = 5
                             Write-Host "No input detected. Defaulting to 5 minutes."
                         }
 
-                    if ($delay -match '^\d+$') 
+                    If ($delay -match '^\d+$') 
                         {
                             $seconds = [int]$delay * 60
                             [System.Windows.Forms.MessageBox]::Show("Reboot scheduled in $delay minute(s).","Confirmation","OK","Information")
@@ -186,7 +186,7 @@ Function Request-Reboot
                             Restart-Computer -Force
                             break
                         } 
-                    else 
+                    Else 
                         {
                             Write-Host "Invalid input. Please enter a numeric value."
                         }
@@ -294,152 +294,258 @@ Function Test-PerfCounters
     {
         param
             (
-                [string]$DllPath,
-                [string]$TestPath,
-                [string]$GetService,
-                [string]$VerifyDll,
-                [string]$EnablePerf,
-                [string]$RegTest,
-                [string]$ParseEvents
+                [string]$DLL_Name,
+                
+                [ValidateSet(0,1)]
+                [int]$TestPath = 0,
+
+                [ValidateSet(0,1)]
+                [int]$GetService = 0,
+
+                [ValidateSet(0,1)]
+                [int]$VerifyDLL = 0,
+
+                [ValidateSet(0,1)]
+                [int]$RegTest = 0,
+
+                [ValidateSet(0,1)]
+                [int]$EnablePerf = 0,
+
+                [ValidateSet(0,1)]
+                [int]$ParseEvents = 0
             )
-
-        If ($PSBoundParameters.ContainsKey('TestDll'))
+        
+        $DLL_Path = "C:\Windows\System32\$DLL_Name.dll"
+        $DLL_RegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$DLL_Name\Performance"
+        
+        # HKLM:\SYSTEM\CurrentControlSet\Services\$DLL\Performance
+        If ($PSBoundParameters.ContainsKey('TestPath'))
             {
-                # Insert Logic
-                # can PSCustom object not need.
-
+                $DLLres = Test-Path $DLL_Path
+                If ($DLLres)
+                    {
+                        Return [PSCustomObject]@{Status = "Present"; Message = "DLL found"}
+                    }
+                Else 
+                    {
+                        Return [PSCustomObject]@{Status = "Missing"; Message = "DLL not found"}
+                    }
+            }
+        
+        If ($PSBoundParameters.ContainsKey('GetService'))
+            {
+            }
+        
+        If ($PSBoundParameters.ContainsKey('VerifyDLL'))
+            {
+                #insert logic
+                #sfc /verifyfile="$DllPath" /OFFLOGFILE=(Log-File)
+            }
+        
+        If ($PSBoundParameters.ContainsKey('RegTest'))
+            {
+                $RegResult = Test-Path $DLL_RegistryPath
+                If ($RegResult)
+                    {
+                        Return [PSCustomObject]@{Status = "Present"; Message = "Performance counter registry key is present."}
+                    }
+                Else
+                    {
+                        Return [PSCustomObject]@{Status = "Missing"; Message = "Performance counter registry key could not be found!"}
+                    }
+            }
+        
+        If ($PSBoundParameters.ContainsKey('EnablePerf'))
+            {
+                # testing to see if perf counter can be enabled.
+                $EnTest = lodctr /e:$DLL_Name
             }
 
-        If ($
-        <#sfc /verifyfile="$DllPath" /OFFLOGFILE=(Log-File)
+        If ($PSBoundParameters.ContainsKey())
+            {
+            }
+
+        <#
         
         Test existence:
-        Test-Path $DllPath
 
-
-        if path returns true:
+        If path returns true:
         
         try lodctr /e:%dllname%
         match (Error: unable to enable service "%dllname%"; error code is 2.)
         
         Get-Service "%PerfSvc%"
-        if disabled:
+        If disabled:
         Set-Service -Name "%PerfSvc%" -StartupType Automatic
         Start-Service -Name "%dllname%"
 
         Verify Registry Entry:
         Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
 
-        if entry is not found pass false out of function so that the corrections can be performed.#>
+        If entry is not found pass false out of function so that the corrections can be performed.
+        #>
     }
 
 Function Repair-PerfCounters
  {
     param
         (
-            [string]$Perflib
+            [string]$PerfLib
         )
     
     $keepProps = @("Library","Open","Collect","Close")
     
-    Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
+    # Need to simplify testing by moving some functions into Test-PerfCounters
+
+    # Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\%dllname%\Performance"
 
 
     If ($PSBoundParameters.ContainsKey('Perflib'))
     {
-        <# Sysmain dll perfcounters/registration
+        If ($PerfLib -eq "SysMain"
+            {
+                # Sysmain dll perfcounters/registration
+                # dll = "C:\Windows\System32\sysmain.dll"
+                # perfcounter key =  "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
+                $Result = Test-PerfCounters -DLL_Name $PerfLib -RegTest 1
+                # Create key If missing
+                If ($Result.Status -eq "Missing") {
+                    New-Item -Path $SysMainPerfKey -Force
+                }
 
-        $sysmainPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
+                # Remove invalid entries
+                (Get-ItemProperty -Path $SysMainPerfKey).PSObject.Properties |
+                    Where-Object { $_.Name -notin $keepProps } |
+                    ForEach-Object { Remove-ItemProperty -Path $SysMainPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
 
-        # Create key if missing
-        If (-not (Test-Path $sysmainPerfKey)) {
-            New-Item -Path $sysmainPerfKey -Force
-        }
+                # Set correct values
+                Set-ItemProperty -Path $SysMainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
+                Set-ItemProperty -Path $SysMainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
+                Set-ItemProperty -Path $SysMainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
+                Set-ItemProperty -Path $SysMainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
 
-        # Set correct values
-        Set-ItemProperty -Path $sysmainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
-        Set-ItemProperty -Path $sysmainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
-        Set-ItemProperty -Path $sysmainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
-        Set-ItemProperty -Path $sysmainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
+                Write-Host "SysMain Performance key has been created/reset."
 
-        Write-Host "SysMain Performance key has been created/reset."
-    
-    
-        # -------------------------------------------------------- LSM perf counters/registration 
+                lodctr /T:SysMain
+                lodctr /e:SysMain
+            }
 
-        #dll "C:\Windows\System32\perfts.dll"
-        # Reset LSM Performance registry values
-        $lsmPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
+        If ($PerfLib -eq "LSM")
+            {
+                # -------------------------------------------------------- LSM perf counters/registration 
 
-        # Ensure key exists
-        if (-not (Test-Path $lsmPerfKey)) {
-            New-Item -Path $lsmPerfKey -Force
-        }
+                #dll = "C:\Windows\System32\lsmperf.dll"
+                # Reset LSM Performance registry values
+                $LSM_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
 
-        # Set correct values
-        Set-ItemProperty -Path $lsmPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-        Set-ItemProperty -Path $lsmPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-        Set-ItemProperty -Path $lsmPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-        Set-ItemProperty -Path $lsmPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+                # Ensure key exists
+                If (-not (Test-Path $LSM_PerfKey)) {
+                    New-Item -Path $LSM_PerfKey -Force
+                }
 
-        # Remove invalid entries
+                # Remove invalid entries
+                (Get-ItemProperty -Path $LSM_PerfKey).PSObject.Properties |
+                    Where-Object { $_.Name -notin $keepProps } |
+                    ForEach-Object { Remove-ItemProperty -Path $LSM_PerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+
+                # Set correct values
+                Set-ItemProperty -Path $LSM_PerfKey -Name "Library" -Value "C:\Windows\System32\lsmperf.dll"
+                Set-ItemProperty -Path $LSM_PerfKey -Name "Open" -Value "OpenTSPerformanceData"
+                Set-ItemProperty -Path $LSM_PerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+                Set-ItemProperty -Path $LSM_PerfKey -Name "Close" -Value "CloseTSPerformanceData"
+
+                # Remove invalid entries
 
 
-        Write-Host "Registry values for LSM Performance key have been reset."
+                Write-Host "Registry values for LSM Performance key have been reset."
 
-        # Rebuild counters
-        Write-Host "Rebuilding performance counters..."
-        lodctr /T:LSM
-        lodctr /e:LSM
+                # Rebuild counters
+                Write-Host "Rebuilding performance counters..."
+                lodctr /T:LSM
+                lodctr /e:LSM
 
-        Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
+                Write-Host "Done. Please run 'sfc /scannow' to verify DLL integrity."
+            }
 
-        # -------------------------------------------------------- BITS perf counters/registration 
+        If ($PerfLib -eq "BITS")
+            {
+                # -------------------------------------------------------- BITS perf counters/registration 
+                # dll = "C:\Windows\System32\bitsperf.dll"
 
-        $bitsPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
-        if (-not (Test-Path $bitsPerfKey)) { New-Item -Path $bitsPerfKey -Force }
-        Set-ItemProperty -Path $bitsPerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
-        Set-ItemProperty -Path $bitsPerfKey -Name "Open" -Value "OpenBitsPerformanceData"
-        Set-ItemProperty -Path $bitsPerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
-        Set-ItemProperty -Path $bitsPerfKey -Name "Close" -Value "CloseBitsPerformanceData"
-        Remove-ItemProperty -Path $bitsPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+                $BITS_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
+                
+                If (-not (Test-Path $BITS_PerfKey)) { 
+                        New-Item -Path $BITS_PerfKey -Force 
+                    }
+                # Remove invalid entries
+                (Get-ItemProperty -Path $BITS_PerfKey).PSObject.Properties |
+                    Where-Object { $_.Name -notin $keepProps } |
+                    ForEach-Object { Remove-ItemProperty -Path $BITS_PerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+                
 
-        # -------------------------------------------------------- WMI perf counters and registration 
+                # Set correct values
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Open" -Value "OpenBitsPerformanceData"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Close" -Value "CloseBitsPerformanceData"
 
-        $wmiPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
+                lodctr /T:BITS
+                lodctr /e:BITS
+            }
 
-        # Ensure key exists
-        if (-not (Test-Path $wmiPerfKey)) {
-            New-Item -Path $wmiPerfKey -Force
-        }
+        If ($PerfLib -eq "TermService")
+            {
+                # -------------------------------------------------------- TermService perf counters and registration
 
-        # Remove invalid entries
-        (Get-ItemProperty -Path $wmiPerfKey).PSObject.Properties |
-            Where-Object { $_.Name -notin $keepProps } |
-            ForEach-Object { Remove-ItemProperty -Path $wmiPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+                # dll = "C:\Windows\System32\perfts.dll"
+                $TermPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
+                
+                If (-not (Test-Path $TermPerfKey)) { 
+                        New-Item -Path $TermPerfKey -Force 
+                    }
 
-        # Set correct values
-        Set-ItemProperty -Path $wmiPerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
-        Set-ItemProperty -Path $wmiPerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
-        Set-ItemProperty -Path $wmiPerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
-        Set-ItemProperty -Path $wmiPerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+                # Remove invalid entries
+                (Get-ItemProperty -Path $TermPerfKey).PSObject.Properties |
+                    Where-Object { $_.Name -notin $keepProps } |
+                    ForEach-Object { Remove-ItemProperty -Path $TermPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
 
-        Write-Host "WmiApRpl Performance key has been reset."
-        lodctr /T:WmiApRpl
-        lodctr /e:WmiApRpl
-        # -------------------------------------------------------- TermService perf counters and registration
+                # Set correct values
+                Set-ItemProperty -Path $TermPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
+                Set-ItemProperty -Path $TermPerfKey -Name "Open" -Value "OpenTSPerformanceData"
+                Set-ItemProperty -Path $TermPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
+                Set-ItemProperty -Path $TermPerfKey -Name "Close" -Value "CloseTSPerformanceData"
 
-        # dll = "C:\Windows\System32\perfts.dll"
-        $termPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
-        if (-not (Test-Path $termPerfKey)) { New-Item -Path $termPerfKey -Force }
-        Set-ItemProperty -Path $termPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-        Set-ItemProperty -Path $termPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-        Set-ItemProperty -Path $termPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-        Set-ItemProperty -Path $termPerfKey -Name "Close" -Value "CloseTSPerformanceData"
-        Remove-ItemProperty -Path $termPerfKey -Name "PerfIniFile" -ErrorAction SilentlyContinue
+                lodctr /T:TermService
+                lodctr /e:TermService
+            }
+        
+        If ($Perflib -eq "WMISvc")
+            {
+                # -------------------------------------------------------- WMI perf counters and registration 
 
-        lodctr /T:TermService
-        lodctr /e:TermService
+                $WMI_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
+
+                # Ensure key exists
+                If (-not (Test-Path $WMI_PerfKey)) {
+                        New-Item -Path $WMI_PerfKey -Force
+                    }
+
+                # Remove invalid entries
+                (Get-ItemProperty -Path $WMI_PerfKey).PSObject.Properties |
+                    Where-Object { $_.Name -notin $keepProps } |
+                    ForEach-Object { Remove-ItemProperty -Path $WMI_PerfKey -Name $_.Name -ErrorAction SilentlyContinue }
+
+                # Set correct values
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+
+                Write-Host "WmiApRpl Performance key has been reset."
+                lodctr /T:WmiApRpl
+                lodctr /e:WmiApRpl
+            }
+        <#
         # ------------------------------------------------------------------------
 
         finally do this:
@@ -471,8 +577,14 @@ Function Update-Winmgmt
             (
                 [ValidateSet(0,1)]
                 [int]$Enabled, # 0 or 1
+                
+                [ValidateSet(0,1)]
                 [int]$Stop = 0,
+                
+                [ValidateSet(0,1)]
                 [int]$Start = 0,
+
+                [ValidateSet(0,1)]
                 [int]$Force = 0
             )
         
@@ -574,11 +686,11 @@ Function Update-Winmgmt
                     }
 
                 Return [PSCustomObject]@{
-                    Status       = if ($stopStatus -eq 'Success' -and $startStatus -eq 'Success') { 'Success' } else { 'Failed' }
+                    Status       = If ($stopStatus -eq 'Success' -and $startStatus -eq 'Success') { 'Success' } Else { 'Failed' }
                     Stop         = $stopStatus
                     Start        = $startStatus
                     FallbackUsed = $fallbackUsed
-                    Message      = if ($fallbackUsed) { "Stop failed; Restart-Service used as fallback and succeeded." } else { "Force restart completed successfully." }
+                    Message      = If ($fallbackUsed) { "Stop failed; Restart-Service used as fallback and succeeded." } Else { "Force restart completed successfully." }
                 }
             }
     }
@@ -712,7 +824,7 @@ Function Resync-Counters
 		$SuccessPattern = "Info: Successfully rebuilt performance counter setting"
 		If ($PSBoundParameters.ContainsKey('SyncType'))
             {
-                if ($SyncType -eq "Standard")
+                If ($SyncType -eq "Standard")
                     {
 		                do {
 			                $Attempt++
@@ -769,7 +881,7 @@ Function Resync-Counters
                         Update-Winmgmt -Enabled 1
                     }
 
-		        if ($SyncType -eq "Complete")
+		        If ($SyncType -eq "Complete")
                     {
                         Write-Host "`nAttempting to rebuild performance counters"
 		
