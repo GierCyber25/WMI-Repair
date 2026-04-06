@@ -402,39 +402,29 @@ Function Repair-PerfCounters
 
     If ($PSBoundParameters.ContainsKey('Perflib'))
     {
-        If ($PerfLib -eq "SysMain"
-            {
-                # Sysmain dll perfcounters/registration
-                # dll = "C:\Windows\System32\sysmain.dll"
-                # perfcounter key =  "HKLM:\SYSTEM\CurrentControlSet\Services\SysMain\Performance"
-                $Result = Test-PerfCounters -DLL_Name $PerfLib -RegTest 1
-                # Create key If missing
-                If ($Result.Status -eq "Missing") {
-                    New-Item -Path $SysMainPerfKey -Force
-                }
-
-                # Remove invalid entries
-                (Get-ItemProperty -Path $SysMainPerfKey).PSObject.Properties |
-                    Where-Object { $_.Name -notin $keepProps } |
-                    ForEach-Object { Remove-ItemProperty -Path $SysMainPerfKey -Name $_.Name -ErrorAction SilentlyContinue }
-
-                # Set correct values
-                Set-ItemProperty -Path $SysMainPerfKey -Name "Library" -Value "C:\Windows\System32\sysmain.dll"
-                Set-ItemProperty -Path $SysMainPerfKey -Name "Open" -Value "OpenSysMainPerformanceData"
-                Set-ItemProperty -Path $SysMainPerfKey -Name "Collect" -Value "CollectSysMainPerformanceData"
-                Set-ItemProperty -Path $SysMainPerfKey -Name "Close" -Value "CloseSysMainPerformanceData"
-
-                Write-Host "SysMain Performance key has been created/reset."
-
-                lodctr /T:SysMain
-                lodctr /e:SysMain
-            }
 
         If ($PerfLib -eq "LSM")
             {
                 # -------------------------------------------------------- LSM perf counters/registration 
-
-                #dll = "C:\Windows\System32\lsmperf.dll"
+				#Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
+					#Close           : CloseLagPerfData
+					#Collect         : CollectLagPerfData
+					#Collect Timeout : 1000
+					#Library         : C:\Windows\System32\perfts.dll
+					#Open            : OpenLagPerfData
+					#Open Timeout    : 1000
+					#First Counter   : 8772
+					#First Help      : 8773
+					#Last Counter    : 8778
+					#Last Help       : 8779
+					#PerfIniFile     : lagcounterdef.ini
+					#InstallType     : 1
+					#PSPath          : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LSM\Performance
+					#PSParentPath    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LSM
+					#PSChildName     : Performance
+					#PSDrive         : HKLM
+					#PSProvider      : Microsoft.PowerShell.Core\Registry
+                # dll = "C:\Windows\System32\lsmperf.dll"
                 # Reset LSM Performance registry values
                 $LSM_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
 
@@ -470,9 +460,17 @@ Function Repair-PerfCounters
         If ($PerfLib -eq "BITS")
             {
                 # -------------------------------------------------------- BITS perf counters/registration 
-                # dll = "C:\Windows\System32\bitsperf.dll"
-
+                <#
+				Close         : PerfMon_Close
+				Collect       : PerfMon_Collect
+				Library       : C:\Windows\System32\bitsperf.dll
+				Open          : PerfMon_Open
+				PerfIniFile   : bitsctrs.ini
+				InstallType   : 1
+				PSPath        : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BITS\Performance
+				#>
                 $BITS_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
+				
                 
                 If (-not (Test-Path $BITS_PerfKey)) { 
                         New-Item -Path $BITS_PerfKey -Force 
@@ -485,9 +483,10 @@ Function Repair-PerfCounters
 
                 # Set correct values
                 Set-ItemProperty -Path $BITS_PerfKey -Name "Library" -Value "C:\Windows\System32\bitsperf.dll"
-                Set-ItemProperty -Path $BITS_PerfKey -Name "Open" -Value "OpenBitsPerformanceData"
-                Set-ItemProperty -Path $BITS_PerfKey -Name "Collect" -Value "CollectBitsPerformanceData"
-                Set-ItemProperty -Path $BITS_PerfKey -Name "Close" -Value "CloseBitsPerformanceData"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Open" -Value "PerfMon_Open"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Collect" -Value "PerfMon_Collect"
+                Set-ItemProperty -Path $BITS_PerfKey -Name "Close" -Value "PerfMon_Close"
+				Set-ItemProperty -Path $BITS_PerfKey -Name "PerfIniFile" -Value "bitsctrs.ini"
 
                 lodctr /T:BITS
                 lodctr /e:BITS
@@ -499,7 +498,18 @@ Function Repair-PerfCounters
 
                 # dll = "C:\Windows\System32\perfts.dll"
                 $TermPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
-                
+                <#
+				Close                     : CloseTSObject
+				Collect                   : CollectTSObjectData
+				Collect Supports Metadata : 1
+				Collect Timeout           : 1000
+				Library                   : C:\Windows\System32\perfts.dll
+				Open                      : OpenTSObject
+				Open Timeout              : 1000
+				PerfIniFile               : tslabels.ini
+				InstallType               : 1
+				PSPath                    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\TermService\Performance
+				#>
                 If (-not (Test-Path $TermPerfKey)) { 
                         New-Item -Path $TermPerfKey -Force 
                     }
@@ -511,9 +521,10 @@ Function Repair-PerfCounters
 
                 # Set correct values
                 Set-ItemProperty -Path $TermPerfKey -Name "Library" -Value "C:\Windows\System32\perfts.dll"
-                Set-ItemProperty -Path $TermPerfKey -Name "Open" -Value "OpenTSPerformanceData"
-                Set-ItemProperty -Path $TermPerfKey -Name "Collect" -Value "CollectTSPerformanceData"
-                Set-ItemProperty -Path $TermPerfKey -Name "Close" -Value "CloseTSPerformanceData"
+                Set-ItemProperty -Path $TermPerfKey -Name "Open" -Value "OpenTSObject"
+                Set-ItemProperty -Path $TermPerfKey -Name "Collect" -Value "CollectTSObjectData"
+                Set-ItemProperty -Path $TermPerfKey -Name "Close" -Value "CloseTSObject"
+				Set-ItemProperty -Path $TermPerfKey -Name "PerfIniFile" -Value "tslabels.ini"
 
                 lodctr /T:TermService
                 lodctr /e:TermService
@@ -524,7 +535,14 @@ Function Repair-PerfCounters
                 # -------------------------------------------------------- WMI perf counters and registration 
 
                 $WMI_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
-
+				<#
+				Close         : WmiClosePerfData
+				Collect       : WmiCollectPerfData
+				Library       : C:\WINDOWS\system32\wbem\wmiaprpl.dll
+				Open          : WmiOpenPerfData
+				PerfIniFile   : WmiApRpl.ini
+				PSPath        : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance
+				#>
                 # Ensure key exists
                 If (-not (Test-Path $WMI_PerfKey)) {
                         New-Item -Path $WMI_PerfKey -Force
@@ -537,9 +555,10 @@ Function Repair-PerfCounters
 
                 # Set correct values
                 Set-ItemProperty -Path $WMI_PerfKey -Name "Library" -Value "C:\Windows\System32\wbem\WmiApRpl.dll"
-                Set-ItemProperty -Path $WMI_PerfKey -Name "Open" -Value "OpenWmiApRplPerformanceData"
-                Set-ItemProperty -Path $WMI_PerfKey -Name "Collect" -Value "CollectWmiApRplPerformanceData"
-                Set-ItemProperty -Path $WMI_PerfKey -Name "Close" -Value "CloseWmiApRplPerformanceData"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Open" -Value "WmiOpenPerfData"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Collect" -Value "WmiCollectPerfData"
+                Set-ItemProperty -Path $WMI_PerfKey -Name "Close" -Value "WmiClosePerfData"
+				Set-ItemProperty -Path $TermPerfKey -Name "PerfIniFile" -Value "WmiApRpl.ini"
 
                 Write-Host "WmiApRpl Performance key has been reset."
                 lodctr /T:WmiApRpl
