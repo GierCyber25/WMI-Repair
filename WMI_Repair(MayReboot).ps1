@@ -1,204 +1,9 @@
 ﻿# Author: Carter Gierhart
-# Last Updated:  Apr 6, 2026
+# Last Updated: Wednesday, May 20th, 2026 6:45 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
-# -------------------------------------------------------- To Do/Implement --------------------------------------------------------
-
-# -------------------------------------------------------- Logging Functions --------------------------------------------------------
-
-
-
-##################### Initial detection and setup for logging.
-Function Date-Stamp {
-    Get-Date -Format "MM/dd/yyyy"
-}
-
-Function Get-Time {
-    Get-Date -Format "HH:mm:ss"
-}
-
-Function Log-File
-    {
-        #################### Variable initialization
-        $GetUser = (Get-ChildItem env:\userprofile).Value
-        $UserPath_OneDrive = Join-Path $GetUser "OneDrive\Desktop"
-        $UserPath = Join-path $GetUser "Desktop"
-        $FallBack = "C:\WMI Repair Logs"
-        $LogFile = "WMI_Repair_Log[$(Date-Stamp)].txt"
-        $Header = "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
-
-        # Determine logging directory
-        If (Test-Path -Path $UserPath_OneDrive)
-            {
-                Write-Host "OneDrive detected`nSetting up logfile accordingly.."
-                $LogDir = Join-Path $UserPath_OneDrive "WMI Repair Logs"
-            }
-                
-        ElseIf (Test-Path -Path $UserPath)
-            {
-                Write-Host "Normal user path detected!`nSetting up logfile accordingly.."
-                $LogDir = Join-Path $UserPath "WMI Repair Logs"
-            }
-                
-        Else
-            {
-                $LogDir = $FallBack
-                If (-not (Test-Path $LogDir))
-                    {
-                        New-Item -Path $LogDir -ItemType Directory | Out-Null
-                    }
-                Write-Host "Using fallback path: $LogDir"
-            }
-
-        $LogPath = Join-Path $LogDir $LogFile
-
-        # Create or Update log file
-        If (-not (Test-Path $LogPath))
-            {
-                New-Item -Path $LogPath -ItemType File -Value "$Header`n" | Out-Null
-            } 
-        Else
-            {
-                Add-Content -Path $LogPath -Value "`n$Header"
-            }
-        Return $LogPath
-
-    }
-
-
-Function Write-Failure
-    {
-    #################### Function for unrecoverable failures requiring a reboot.
-        param 
-            ( 
-                [Parameter(ValueFromPipeline = $True)]
-                $ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
-                
-                [string]$LogPath = (Log-File)
-            )
-        
-        Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
-
-        #################### send windows notif sound to computer speakers before reboot
-        for ($i = 0; $i -le 1; $i++){"`a"}
-        Request-Reboot
-        exit 1
-    }
-
-
-Function Write-Log
-    {
-    
-    #################### General Failures and General Logs: debug, information, and warning.
-    #################### usually no reboot required. (Error handling should already be in place.)
-        [CmdletBinding()]
-        param 
-            (
-                [Parameter(ValueFromPipeline = $True)]$Message = "Unknown or Undefined error detected!",
-
-                [ValidateSet("Info", "Debug", "Warning")]
-                [string]$Type = "Info", #################### Debug, Info (default), Warning 
-                [string]$LogPath = (Log-File)
-            )
-        
-        If ($Type -eq "Debug")
-            {
-                Write-Host "General Script Error Detected"
-                process
-                    {
-                        $LogMessage = If ($Message -is [string]) { $Message } Else { $Message | Out-String }
-                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
-                    }
-            }
-        Else
-            {
-                process
-                    {
-                        $LogMessage = If ($Message -is [string]) { $Message } Else { $Message | Out-String }
-                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : $LogMessage"
-                    }
-            }
-    }
-
-# -------------------------------------------------------- Supporting Functions --------------------------------------------------------
-
-Function Request-Reboot 
-    {
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
-        Add-Type -AssemblyName Microsoft.VisualBasic
-
-        # Create the form
-        $form = New-Object System.Windows.Forms.Form
-        $form.Text = "Unrecoverable Script Failure"
-        $form.Size = New-Object System.Drawing.Size(400,200)
-        $form.StartPosition = "CenterScreen"
-        $form.FormBorderStyle = 'FixedDialog'
-        $form.MaximizeBox = $false
-        $form.MinimizeBox = $false
-
-        # Label
-        $label = New-Object System.Windows.Forms.Label
-        $label.Text = "Critical Error! A reboot is required."
-        $label.AutoSize = $true
-        $label.Location = New-Object System.Drawing.Point(30,20)
-        $form.Controls.Add($label)
-
-        # Restart Immediately button
-        $btnRestartNow = New-Object System.Windows.Forms.Button
-        $btnRestartNow.Text = "Restart Immediately"
-        $btnRestartNow.Size = New-Object System.Drawing.Size(150,30)
-        $btnRestartNow.Location = New-Object System.Drawing.Point(30,80)
-        $btnRestartNow.Add_Click({
-            [System.Windows.Forms.MessageBox]::Show("Restarting now...","Restart","OK","Information")
-            Restart-Computer -Force
-        })
-        $form.Controls.Add($btnRestartNow)
-
-        # Restart Later button
-        $btnRestartLater = New-Object System.Windows.Forms.Button
-        $btnRestartLater.Text = "Restart Later"
-        $btnRestartLater.Size = New-Object System.Drawing.Size(150,30)
-        $btnRestartLater.Location = New-Object System.Drawing.Point(200,80)
-        $btnRestartLater.Add_Click({
-            $form.Close()
-            While ($true) 
-                {
-                    Write-Host "You have 30 seconds to enter delay in minutes (default = 5)..."
-                    $job = Start-Job { Read-Host "Enter delay in minutes" }
-                    Wait-Job $job -Timeout 30 | Out-Null
-                    $delay = Receive-Job $job
-                    Remove-Job $job
-
-                    If (-not $delay) 
-                        {
-                            $delay = 5
-                            Write-Host "No input detected. Defaulting to 5 minutes."
-                        }
-
-                    If ($delay -match '^\d+$') 
-                        {
-                            $seconds = [int]$delay * 60
-                            [System.Windows.Forms.MessageBox]::Show("Reboot scheduled in $delay minute(s).","Confirmation","OK","Information")
-                            Write-Host "System will restart in $delay minute(s)..."
-                            Start-Sleep -Seconds $seconds
-                            Restart-Computer -Force
-                            break
-                        } 
-                    Else 
-                        {
-                            Write-Host "Invalid input. Please enter a numeric value."
-                        }
-                }
-        })
-        $form.Controls.Add($btnRestartLater)
-
-        # Show the form
-        $form.Topmost = $true
-        $form.ShowDialog()
-    }
-
+Import-Module "$PSScriptRoot\RebootRequest"
+Import-Module "$PSScriptRoot\LoggingUtil"
 
 # -------------------------------------------------------- Diagnostic Functions --------------------------------------------------------
 
@@ -393,7 +198,7 @@ Function Repair-PerfCounters
             [string]$PerfLib
         )
     
-    $keepProps = @("Library","Open","Collect","Close")
+    $keepProps = @("Library", "Open", "Collect", "Close", "First Counter", "First Help", "Last Counter", "Last Help", "Library Validation Code", "PerfIniFile", "PSPath", "PSParentPath", "PSChildName", "PSDrive", "PSProvider")
     
     # Need to simplify testing by moving some functions into Test-PerfCounters
 
@@ -405,26 +210,6 @@ Function Repair-PerfCounters
 
         If ($PerfLib -eq "LSM")
             {
-                # -------------------------------------------------------- LSM perf counters/registration 
-				#Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
-					#Close           : CloseLagPerfData
-					#Collect         : CollectLagPerfData
-					#Collect Timeout : 1000
-					#Library         : C:\Windows\System32\perfts.dll
-					#Open            : OpenLagPerfData
-					#Open Timeout    : 1000
-					#First Counter   : 8772
-					#First Help      : 8773
-					#Last Counter    : 8778
-					#Last Help       : 8779
-					#PerfIniFile     : lagcounterdef.ini
-					#InstallType     : 1
-					#PSPath          : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LSM\Performance
-					#PSParentPath    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LSM
-					#PSChildName     : Performance
-					#PSDrive         : HKLM
-					#PSProvider      : Microsoft.PowerShell.Core\Registry
-                # dll = "C:\Windows\System32\lsmperf.dll"
                 # Reset LSM Performance registry values
                 $LSM_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\LSM\Performance"
 
@@ -444,8 +229,6 @@ Function Repair-PerfCounters
                 Set-ItemProperty -Path $LSM_PerfKey -Name "Collect" -Value "CollectTSPerformanceData"
                 Set-ItemProperty -Path $LSM_PerfKey -Name "Close" -Value "CloseTSPerformanceData"
 
-                # Remove invalid entries
-
 
                 Write-Host "Registry values for LSM Performance key have been reset."
 
@@ -460,15 +243,6 @@ Function Repair-PerfCounters
         If ($PerfLib -eq "BITS")
             {
                 # -------------------------------------------------------- BITS perf counters/registration 
-                <#
-				Close         : PerfMon_Close
-				Collect       : PerfMon_Collect
-				Library       : C:\Windows\System32\bitsperf.dll
-				Open          : PerfMon_Open
-				PerfIniFile   : bitsctrs.ini
-				InstallType   : 1
-				PSPath        : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BITS\Performance
-				#>
                 $BITS_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\BITS\Performance"
 				
                 
@@ -498,18 +272,6 @@ Function Repair-PerfCounters
 
                 # dll = "C:\Windows\System32\perfts.dll"
                 $TermPerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Performance"
-                <#
-				Close                     : CloseTSObject
-				Collect                   : CollectTSObjectData
-				Collect Supports Metadata : 1
-				Collect Timeout           : 1000
-				Library                   : C:\Windows\System32\perfts.dll
-				Open                      : OpenTSObject
-				Open Timeout              : 1000
-				PerfIniFile               : tslabels.ini
-				InstallType               : 1
-				PSPath                    : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\TermService\Performance
-				#>
                 If (-not (Test-Path $TermPerfKey)) { 
                         New-Item -Path $TermPerfKey -Force 
                     }
@@ -535,14 +297,6 @@ Function Repair-PerfCounters
                 # -------------------------------------------------------- WMI perf counters and registration 
 
                 $WMI_PerfKey = "HKLM:\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance"
-				<#
-				Close         : WmiClosePerfData
-				Collect       : WmiCollectPerfData
-				Library       : C:\WINDOWS\system32\wbem\wmiaprpl.dll
-				Open          : WmiOpenPerfData
-				PerfIniFile   : WmiApRpl.ini
-				PSPath        : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WmiApRpl\Performance
-				#>
                 # Ensure key exists
                 If (-not (Test-Path $WMI_PerfKey)) {
                         New-Item -Path $WMI_PerfKey -Force
@@ -874,9 +628,7 @@ Function Resync-Counters
 				                {
 					                If ($_.Exception.Message -match $ErrorPattern) 
 						                {
-							                Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)" 
-                                            #Write-Log $_.Exception.Message + attempt number
-                                    
+							                Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
 							                If ($Attempt -lt $MaxAttempts)
 								                {
 									                Start-Sleep -Seconds 2
@@ -890,7 +642,7 @@ Function Resync-Counters
 						                }
 					                Else 
 						                {
-							                Write-Log $_.Exception.Message
+							                Write-Log $_.Exception.Message -Type Debug
 							                Return $False
 						                }
 				                }
@@ -930,12 +682,13 @@ Function Resync-Counters
 					                & cmd /c "cd C:\Windows\System32 && winmgmt /resyncperf"
 					                Write-Host "Resync Successful!"
                                     Write-Log -Message "Successfully re-synced performance counters" -Type Info
+                                    Return $True
 				                }
 			                Catch 
 				                {
 					                If ($_.Exception.Message -match $ErrorPattern)
 						                {
-							                Write-Host "Rebuild Error Detected, retrying (Attempt $Attempt)"
+							                Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
 							                If ($Attempt -lt $MaxAttempts)
 								                {
 									                Start-Sleep -Seconds 2
@@ -943,18 +696,19 @@ Function Resync-Counters
 							                Else
 								                {
 									                Write-Host "Failed to rebuild performance counters after $MaxAttempts attempts."
-                                                    Write-Output "Error detected while re-syncing performance counters!`n`tRetrying (Attempt $Attempt)..." | Write-Log -Type Warning
 									                Write-Failure $_.Exception.Message
+                                                    Return $False
 								                }
 							
 						                }
 					                Else 
 						                {
 							                Write-Host "Unexpected error has occurred."
-                                            Write-Failure $_.Exception.Message
+                                            Write-Failure $_.Exception.Message -Type Debug
+                                            Return $False
 						                }
 				                }
-			                } while ($Attempt -lt $MaxAttempts)
+			                } while ($Attempt -lt $MaxAttempt)
 		
 		                # Set WMI Services back to normal and start them
                         Update-Winmgmt -Enabled 1
