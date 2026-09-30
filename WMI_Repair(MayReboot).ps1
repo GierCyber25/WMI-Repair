@@ -1,5 +1,5 @@
 # Author: Carter Gierhart
-# Last Updated: Wednesday, May 20th, 2026 6:45 PM
+# Last Updated: Tuesday, September 29th, 2026 9:00 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
 Import-Module "$PSScriptRoot\RebootRequest"
