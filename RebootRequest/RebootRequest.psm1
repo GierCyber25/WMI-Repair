@@ -1,4 +1,4 @@
-﻿# Reboot Request Module
+# Reboot Request Module
 Function Request-Reboot {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -58,15 +58,15 @@ Function Request-Reboot {
         $delay = $null
         while ($true) {
             Write-Host "Enter delay in minutes, or press Enter for default (5 minutes):"
-            $input = Read-Host "Delay (minutes)"
+            $Sinput = Read-Host "Delay (minutes)"
 
-            if ([string]::IsNullOrWhiteSpace($input)) {
+            if ([string]::IsNullOrWhiteSpace($Sinput)) {
                 $delay = 5
                 Write-Host "Defaulting to 5 minutes."
                 break
             }
-            elseif ($input -match '^\d+$' -and [int]$input -gt 0) {
-                $delay = [int]$input
+            elseif ($Sinput -match '^\d+$' -and [int]$Sinput -gt 0) {
+                $delay = [int]$Sinput
                 break
             }
             else {
