@@ -1,21 +1,21 @@
-﻿##################### Initial detection and setup for logging.
-Function Date-Stamp {
+##################### Initial detection and setup for logging.
+Function Get-DateStamp {
     Get-Date -Format "MM/dd/yyyy"
 }
 
-Function Get-Time {
+Function Get-TimeStamp {
     Get-Date -Format "HH:mm:ss"
 }
 
-Function Log-File
+Function Initialize-LogFile
     {
         #################### Variable initialization
         $GetUser = (Get-ChildItem env:\userprofile).Value
         $UserPath_OneDrive = Join-Path $GetUser "OneDrive\Desktop"
         $UserPath = Join-path $GetUser "Desktop"
         $FallBack = "C:\WMI Repair Logs"
-        $LogFile = "WMI_Repair_Log[$(Date-Stamp)].txt"
-        $Header = "----------------------------WMI Repair Script Log: [$(Date-Stamp)]----------------------------"
+        $LogFile = "WMI_Repair_Log[$(Get-DateStamp)].txt"
+        $Header = "----------------------------WMI Repair Script Log: [$(Get-DateStamp)]----------------------------"
 
         # Determine logging directory
         If (Test-Path -Path $UserPath_OneDrive)
@@ -64,13 +64,13 @@ Function Write-Failure
                 [Parameter(ValueFromPipeline = $True)]
                 $ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
                 
-                [string]$LogPath = (Log-File)
+                [string]$LogPath = (Invoke-LogFile)
             )
         
         Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
-        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
+        Add-Content -Path $LogPath -Value "`n[$(Get-TimeStamp)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
 
-        #################### send windows notif sound to computer speakers before reboot
+        #################### send windows notification sound to computer speakers before reboot
         for ($i = 0; $i -le 1; $i++){"`a"}
         Request-Reboot
         exit 1
@@ -99,11 +99,11 @@ Function Write-Log
                 If ($Type -eq "Debug") 
                     {
                         Write-Host "General Script Error Detected: $LogMessage"
-                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : General script error detected!`n`tError info: $LogMessage"
+                        Add-Content -Path $LogPath -Value "`n[$(Get-TimeStamp)] $Type : General script error detected!`n`tError info: $LogMessage"
                     }
                 Else 
                     {
-                        Add-Content -Path $LogPath -Value "`n[$(Get-Time)] $Type : $LogMessage"
+                        Add-Content -Path $LogPath -Value "`n[$(Get-TimeStamp)] $Type : $LogMessage"
                     }
             }
     }
