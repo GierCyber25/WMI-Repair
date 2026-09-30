@@ -1,4 +1,4 @@
-﻿# Author: Carter Gierhart
+# Author: Carter Gierhart
 # Last Updated: Wednesday, May 20th, 2026 6:45 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
@@ -17,7 +17,7 @@ Function Get-BitLocker {
 	}
 
 
-Function Verify-WMIEvents 
+Function Get-WMIEvents 
 	{
 		[CmdletBinding()]
 		param (
@@ -33,7 +33,7 @@ Function Verify-WMIEvents
 	}
 
 
-Function Verify-PerfLib 
+Function Get-PerfLibEvents
 	{
 
 		[CmdletBinding()]
@@ -87,8 +87,8 @@ Function Resolve-WmiApSrv
     #################### parse output of Get-WmiApSrv to determine next steps
 		switch (Get-WmiApSrv) 
 			{
-				1 {Recreate-WmiApSrv}
-				2 {Recreate-WmiApSrv}
+				1 {Repair-WmiApSrv}
+				2 {Repair-WmiApSrv}
 				3 {Write-Output "WmiApSrv service exists!`nMoving On!"}
                 default {Write-Log -Type Debug}
 			}
@@ -163,7 +163,7 @@ Function Test-PerfCounters
         If ($PSBoundParameters.ContainsKey('EnablePerf'))
             {
                 # testing to see if perf counter can be enabled.
-                $EnTest = lodctr /e:$DLL_Name
+                # $EnTest = lodctr /e:$DLL_Name
             }
 
         If ($PSBoundParameters.ContainsKey())
@@ -332,7 +332,7 @@ Function Repair-PerfCounters
 
 # -------------------------------------------------------- Main Functions --------------------------------------------------------
 
-Function Recreate-WmiApSrv 
+Function Repair-WmiApSrv 
 	{
 		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
 		Copy-Item -Path "C:\Windows\WinSxS\**\wmiapsrv.exe" -Destination "C:\Windows\System32\wbem\wmiapsrv.exe"
@@ -424,20 +424,20 @@ Function Update-Winmgmt
                 Catch 
                     {
                         Write-Host "Stop-Service failed. Falling back to Restart-Service..."
-                        #add output to log
+                        # add output to log
                         $fallbackUsed = $true
                         Try 
                             {
                                 Restart-Service -Name "winmgmt" -Force -ErrorAction Stop
                                 $stopStatus = 'Success'   # Treat fallback as success
                                 $startStatus = 'Success'
-                                #add output to log
+                                # add output to log
                             } 
                 
                         Catch 
                             {
                                 Write-Host "Restart-Service also failed."
-                                #add output to log
+                                # add output to log
                             }
                     }
 
@@ -448,13 +448,13 @@ Function Update-Winmgmt
                             {
                                 Start-Service -Name "winmgmt" -ErrorAction Stop
                                 $startStatus = 'Success'
-                                #add output to log
+                                # add output to log
                             } 
                     
                         Catch 
                             {
                                 Write-Host "Failed to start Winmgmt after stop."
-                                #add output to log
+                                # add output to log
                             }
                     }
 
@@ -469,7 +469,7 @@ Function Update-Winmgmt
     }
 
 
-Function Rebuild-WMIRepo
+Function Repair-WMIRepo
 	{
         param
             (
@@ -484,7 +484,7 @@ Function Rebuild-WMIRepo
                         $SvcError = "WMI Service could not be forcefully stopped.`nA reboot is required to continue!"
 		
                         Resolve-WmiApSrv
-		                cd C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
+		                Set-Location C:\Windows\System32\wbem; cmd /c "regsvr32 wmiutils.dll /s"
 		
                         # Attempt to stop the WMI service
                         $result = Update-Winmgmt -Stop
@@ -529,7 +529,7 @@ Function Rebuild-WMIRepo
                 If ($RepairType -eq "Complete")
                     {
 		                Resolve-WmiApSrv
-		                cd C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
+		                Set-Location C:\Windows\System32\wbem;cmd /c "regsvr32 wmiutils.dll /s"
 		                Update-Winmgmt -Enabled 0 # -> Update-Winmgmt -Enabled 0
 		                # Attempt to stop the WMI service
 		                $SvcChk = Update-Winmgmt -Stop
@@ -581,7 +581,7 @@ Function Rebuild-WMIRepo
     }
 
 
-Function Resync-Counters 
+Function Sync-Counters 
 	{
         param
             (
@@ -731,16 +731,16 @@ Function Main
         If (Test-WMIRepo) 
 	        {
 		        Write-Host "Repository inconsistent – attempting salvage..."
-		        Rebuild-WMIRepo -RepairType Standard
+		        Repair-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters -SyncType Standard
+		        Sync-Counters -SyncType Standard
 		
 		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed – performing full reset"
-				        Rebuild-WMIRepo -RepairType Complete
+				        Repair-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters -SyncType Complete
+				        Sync-Counters -SyncType Complete
 			        } 
 		        Else 
 			        {
@@ -752,16 +752,16 @@ Function Main
         ElseIf (Get-BitLocker) 
 	        {
 		        Write-OutPut "Bitlocker namespace invalid.`nRebuilding Repository!" | Write-Log -Type Warning
-		        Rebuild-WMIRepo -RepairType Standard
+		        Repair-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters -SyncType Standard
+		        Sync-Counters -SyncType Standard
 		
 		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed!`nResetting Repository." | Write-Log -Type Warning
-				        Rebuild-WMIRepo -RepairType Complete
+				        Repair-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters -SyncType Complete
+				        Sync-Counters -SyncType Complete
 			        } 
 		        Else 
 			        {
@@ -773,16 +773,16 @@ Function Main
         If (Verify-WMIEvents) 
 	        {
 		        Write-Output "WMI Error/Warning events have been detected in the last 30 days.`nRebuilding WMI repository.." | Write-Log -Debug
-		        Rebuild-WMIRepo -RepairType Standard
+		        Repair-WMIRepo -RepairType Standard
 		        cmd /c "winmgmt /salvagerepository"
-		        Resync-Counters -SyncType Standard
+		        Sync-Counters -SyncType Standard
 		
 		        If (Test-WMIRepo) 
 			        {
 				        Write-Output "Salvage failed - performing reset" | Write-Log -Type Warning
-				        Rebuild-WMIRepo -RepairType Complete
+				        Repair-WMIRepo -RepairType Complete
 				        cmd /c "winmgmt /resetrepository"
-				        Resync-Counters -SyncType Complete
+				        Sync-Counters -SyncType Complete
 			        } 
 		        Else 
 			        {
@@ -795,7 +795,7 @@ Function Main
 	        {
                 # new function being written: 
 		        Write-Output "PerfLib errors found.`nRepairing Associated dll's." | Write-Log -Type Warning
-		        cd C:\Windows\System32
+		        Set-Location C:\Windows\System32
 
                 # These aren't com dll's so this straight up just doesn't work
                 # I've been known to be something of a dumbass on occasion 
