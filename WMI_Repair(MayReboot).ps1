@@ -1,5 +1,5 @@
 # Author: Carter Gierhart
-# Last Updated: Tuesday, September 29th, 2026 9:00 PM
+# Last Updated: Wednesday, September 30th, 2026 8:24 PM
 # Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
 
 Import-Module "$PSScriptRoot\RebootRequest"
@@ -9,16 +9,15 @@ Import-Module "$PSScriptRoot\LoggingUtil"
 
 Function Test-WMIRepo {
 		Return (cmd /c "winmgmt /verifyrepository") -notmatch "consistent"
-	}
+}
 
 
 Function Get-BitLocker {
 		Return (Manage-Bde -Status C:) -match "invalid namespace"
-	}
+}
 
 
-Function Get-WMIEvents 
-	{
+Function Get-WMIEvents {
 		[CmdletBinding()]
 		param (
 			[int]$DaysBack = 3
@@ -30,11 +29,10 @@ Function Get-WMIEvents
 			StartTime = $Since
 		} -MaxEvents 1 -ErrorAction SilentlyContinue
 		Return [bool]$Found
-	}
+}
 
 
-Function Get-PerfLibEvents
-	{
+Function Get-PerfLibEvents {
 
 		[CmdletBinding()]
 		param (
@@ -47,11 +45,10 @@ Function Get-PerfLibEvents
 			StartTime = $Since
 		} -MaxEvents 10 -ErrorAction SilentlyContinue
 		Return [bool]$Found
-	}
+}
 
 
-Function Get-WmiApSrv 
-	{
+Function Get-WmiApSrv {
     #################### service checks | for some reason this service can get deleted sometimes
 		$ServiceName = 'wmiapsrv'
 		$RegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
@@ -79,11 +76,10 @@ Function Get-WmiApSrv
 				# Service exists and isn't marked: function status set to 3
 				Return 3
 			}
-	}
+}
 
 
-Function Resolve-WmiApSrv
-	{
+Function Resolve-WmiApSrv {
     #################### parse output of Get-WmiApSrv to determine next steps
 		switch (Get-WmiApSrv) 
 			{
@@ -92,11 +88,10 @@ Function Resolve-WmiApSrv
 				3 {Write-Output "WmiApSrv service exists!`nMoving On!"}
                 default {Write-Log -Type Debug}
 			}
-	}
+}
 
 # Testing for each perfcounter 
-Function Test-PerfCounters
-    {
+Function Test-PerfCounters {
         param
             (
                 [string]$DLL_Name,
@@ -189,10 +184,9 @@ Function Test-PerfCounters
 
         If entry is not found pass false out of function so that the corrections can be performed.
         #>
-    }
+}
 
-Function Repair-PerfCounters
- {
+Function Repair-PerfCounters {
     param
         (
             [string]$PerfLib
@@ -326,23 +320,21 @@ Function Repair-PerfCounters
         sfc /scannow 
         #>
     }
- }
+}
 
 
 
 # -------------------------------------------------------- Main Functions --------------------------------------------------------
 
-Function Repair-WmiApSrv 
-	{
+Function Repair-WmiApSrv {
 		taskkill /im wmi* /f /t; taskkill /im mmc* /f /t
 		Copy-Item -Path "C:\Windows\WinSxS\**\wmiapsrv.exe" -Destination "C:\Windows\System32\wbem\wmiapsrv.exe"
 		sc.exe create WmiApSrv binPath= "C:\Windows\System32\wbem\wmiapsrv.exe" DisplayName= "WMI Performance Adapter" type= "own" start= "demand" error= "normal" obj= "LocalSystem"
 		sc.exe start WmiApSrv
-	}
+}
 
 
-Function Update-Winmgmt
-    {
+Function Update-Winmgmt {
         
         [CmdletBinding()]
 
@@ -466,11 +458,10 @@ Function Update-Winmgmt
                     Message      = If ($fallbackUsed) { "Stop failed; Restart-Service used as fallback and succeeded." } Else { "Force restart completed successfully." }
                 }
             }
-    }
+}
 
 
-Function Repair-WMIRepo
-	{
+Function Repair-WMIRepo {
         param
             (
                 [ValidateSet("Standard", "Complete")]
@@ -578,11 +569,10 @@ Function Repair-WMIRepo
                     Message     = 'Invalid function use!'
                 }
             }
-    }
+}
 
 
-Function Sync-Counters 
-	{
+Function Sync-Counters {
         param
             (
                 [ValidateSet("Standard", "Complete")]
@@ -721,12 +711,11 @@ Function Sync-Counters
                     Message    = 'Invalid function input'    
                 }
             }
-	}
+}
 	
 # -------------------------------------------------------- Main --------------------------------------------------------
 
-Function Main
-    {
+Function Main {
         Write-Host "Beginning Initial Verification of WMI"
         If (Test-WMIRepo) 
 	        {
@@ -808,4 +797,4 @@ Function Main
 	        { 
                 Write-OutPut "Verification Completed.`nNo Errors Found"
 	        }
-    }
+}
