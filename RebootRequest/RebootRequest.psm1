@@ -1,85 +1,67 @@
+# Author: Carter Gierhart
+# Last Updated: Wednesday, September 30th, 2026 8:15 PM
+# Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
+
 # Reboot Request Module
 Function Request-Reboot {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
-    # Create the form
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Unrecoverable Script Failure"
-    $form.Size = New-Object System.Drawing.Size(400, 200)
+    $form.Size = New-Object System.Drawing.Size(400, 230)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
     $form.Topmost = $true
 
-    # Label
     $label = New-Object System.Windows.Forms.Label
     $label.Text = "Critical Error! A reboot is required."
     $label.AutoSize = $true
     $label.Location = New-Object System.Drawing.Point(30, 20)
     $form.Controls.Add($label)
 
-    # Shared result variable
-    $script:rebootChoice = $null
+    # Delay selector replaces Read-Host
+    $lblDelay = New-Object System.Windows.Forms.Label
+    $lblDelay.Text = "Delay if restarting later (minutes):"
+    $lblDelay.AutoSize = $true
+    $lblDelay.Location = New-Object System.Drawing.Point(30, 60)
+    $form.Controls.Add($lblDelay)
 
-    # Restart Immediately button
-    $btnRestartNow = New-Object System.Windows.Forms.Button
-    $btnRestartNow.Text = "Restart Immediately"
-    $btnRestartNow.Size = New-Object System.Drawing.Size(150, 30)
-    $btnRestartNow.Location = New-Object System.Drawing.Point(30, 80)
-    $btnRestartNow.Add_Click({
-        $script:rebootChoice = 'Now'
-        $form.Close()
-    })
-    $form.Controls.Add($btnRestartNow)
+    $numDelay = New-Object System.Windows.Forms.NumericUpDown
+    $numDelay.Minimum = 1
+    $numDelay.Maximum = 1440
+    $numDelay.Value = 5
+    $numDelay.Location = New-Object System.Drawing.Point(250, 57)
+    $numDelay.Size = New-Object System.Drawing.Size(80, 25)
+    $form.Controls.Add($numDelay)
 
-    # Restart Later button
-    $btnRestartLater = New-Object System.Windows.Forms.Button
-    $btnRestartLater.Text = "Restart Later"
-    $btnRestartLater.Size = New-Object System.Drawing.Size(150, 30)
-    $btnRestartLater.Location = New-Object System.Drawing.Point(200, 80)
-    $btnRestartLater.Add_Click({
-        $script:rebootChoice = 'Later'
-        $form.Close()
-    })
-    $form.Controls.Add($btnRestartLater)
+    # DialogResult closes the form and returns the choice, so no handlers or $script: vars
+    $btnNow = New-Object System.Windows.Forms.Button
+    $btnNow.Text = "Restart Immediately"
+    $btnNow.Size = New-Object System.Drawing.Size(150, 30)
+    $btnNow.Location = New-Object System.Drawing.Point(30, 110)
+    $btnNow.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $form.Controls.Add($btnNow)
 
-    # Show the form (blocks until closed)
-    $form.ShowDialog() | Out-Null
+    $btnLater = New-Object System.Windows.Forms.Button
+    $btnLater.Text = "Restart Later"
+    $btnLater.Size = New-Object System.Drawing.Size(150, 30)
+    $btnLater.Location = New-Object System.Drawing.Point(200, 110)
+    $btnLater.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $form.Controls.Add($btnLater)
+
+    $result  = $form.ShowDialog()
+    $minutes = [int]$numDelay.Value   # read before Dispose
     $form.Dispose()
 
-    # Handle choice after form is gone
-    if ($script:rebootChoice -eq 'Now') {
-        [System.Windows.Forms.MessageBox]::Show("Restarting now...", "Restart", "OK", "Information")
-        Restart-Computer -Force
-    }
-    elseif ($script:rebootChoice -eq 'Later') {
-        $delay = $null
-        while ($true) {
-            Write-Host "Enter delay in minutes, or press Enter for default (5 minutes):"
-            $Sinput = Read-Host "Delay (minutes)"
-
-            if ([string]::IsNullOrWhiteSpace($Sinput)) {
-                $delay = 5
-                Write-Host "Defaulting to 5 minutes."
-                break
-            }
-            elseif ($Sinput -match '^\d+$' -and [int]$Sinput -gt 0) {
-                $delay = [int]$Sinput
-                break
-            }
-            else {
-                Write-Host "Invalid input. Please enter a positive whole number."
-            }
+    switch ($result) {
+        'Yes' { Restart-Computer -Force }
+        'No'  {
+            shutdown.exe /r /t ($minutes * 60) /c "WMI repair script: reboot scheduled in $minutes minute(s). Run 'shutdown /a' to cancel."
+            Write-Host "Reboot scheduled in $minutes minute(s)."
         }
-
-        [System.Windows.Forms.MessageBox]::Show(
-            "Reboot scheduled in $delay minute(s).",
-            "Confirmation", "OK", "Information"
-        )
-        Write-Host "System will restart in $delay minute(s)..."
-        Start-Sleep -Seconds ($delay * 60)
-        Restart-Computer -Force
+        default { Write-Host "Reboot prompt dismissed. Please restart the computer manually." }
     }
 }
