@@ -1,4 +1,11 @@
+# Author: Carter Gierhart
+# Last Updated: Wednesday, September 30th, 2026 8:15 PM
+# Copyright (c) 2025 Carter Gierhart // Licensed under the MIT License. See LICENSE file for details.
+
+# Logging Utility Module
 ##################### Initial detection and setup for logging.
+Import-Module "$PSScriptRoot\RebootRequest.psm1"
+
 Function Get-DateStamp {
     Get-Date -Format "MM/dd/yyyy"
 }
@@ -7,8 +14,10 @@ Function Get-TimeStamp {
     Get-Date -Format "HH:mm:ss"
 }
 
-Function Initialize-LogFile
-    {
+$script:LogPath = $null
+
+Function Initialize-LogFile {
+
         #################### Variable initialization
         $GetUser = (Get-ChildItem env:\userprofile).Value
         $UserPath_OneDrive = Join-Path $GetUser "OneDrive\Desktop"
@@ -51,34 +60,38 @@ Function Initialize-LogFile
             {
                 Add-Content -Path $LogPath -Value "`n$Header"
             }
+        
         Return $LogPath
+}
 
+function Get-LogFile {
+    if (-not $script:LogPath) {
+        $script:LogPath = Initialize-LogFile
     }
+    return $script:LogPath
+}
 
-
-Function Write-Failure
-    {
+Function Write-Failure {
     #################### Function for unrecoverable failures requiring a reboot.
         param 
             ( 
                 [Parameter(ValueFromPipeline = $True)]
                 $ErrorMessage = "An unrecoverable unknown or undefined error has been detected requiring a reboot", 
                 
-                [string]$LogPath = (Invoke-LogFile)
+                [string]$LogPath = (Get-LogFile)
             )
         
-        Write-Host "Unrecoverable Script Failure Detected! Restarting computer in 30 seconds" 
+        Write-Host "Unrecoverable Script Failure Detected! Reboot required... `nsending request now..." 
         Add-Content -Path $LogPath -Value "`n[$(Get-TimeStamp)] Critical: Unrecoverable script failure detected!`n`tWarning: $ErrorMessage" 
 
         #################### send windows notification sound to computer speakers before reboot
-        for ($i = 0; $i -le 1; $i++){"`a"}
+        for ($i = 0; $i -lt 1; $i++){[System.Media.SystemSounds]::Exclamation.Play()}
         Request-Reboot
         exit 1
-    }
+}
 
 
-Function Write-Log
-    {
+Function Write-Log {
     
     #################### General Failures and General Logs: debug, information, and warning.
     #################### usually no reboot required. (Error handling should already be in place.)
@@ -89,7 +102,7 @@ Function Write-Log
 
                 [ValidateSet("Info", "Debug", "Warning")]
                 [string]$Type = "Info", #################### Debug, Info (default), Warning 
-                [string]$LogPath = (Log-File)
+                [string]$LogPath = (Get-LogFile)
             )
         
         process 
@@ -106,4 +119,4 @@ Function Write-Log
                         Add-Content -Path $LogPath -Value "`n[$(Get-TimeStamp)] $Type : $LogMessage"
                     }
             }
-    }
+}
